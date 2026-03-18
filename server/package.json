@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "cd .. && npx prisma generate",
     "build": "tsc && cp -r src/generated dist/",
     "start": "node dist/index.js",
     "db:reset": "tsx src/reset.ts",

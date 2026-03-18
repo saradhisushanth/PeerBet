@@ -114,7 +114,7 @@ async function main() {
   }
 
   const teamList = await prisma.team.findMany();
-  const teamsByShort = Object.fromEntries(teamList.map((t) => [t.shortName, t]));
+  const teamsByShort = Object.fromEntries(teamList.map((t: (typeof teamList)[number]) => [t.shortName, t]));
   if (Object.keys(teamsByShort).length !== IPL_2026_TEAMS.length) {
     console.log("Team count mismatch. Ensure teams are seeded first.");
     process.exit(1);

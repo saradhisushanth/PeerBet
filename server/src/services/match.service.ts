@@ -165,8 +165,8 @@ export const matchService = {
     for (const u of allUsers) {
       const bet = userToBet.get(u.id);
       const row = { userId: u.id, username: u.username };
-      if (bet?.teamId === match.homeTeamId) onHome.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
-      else if (bet?.teamId === match.awayTeamId) onAway.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
+      if (bet && bet.teamId === match.homeTeamId) onHome.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
+      else if (bet && bet.teamId === match.awayTeamId) onAway.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
       else undecided.push(row);
     }
 
