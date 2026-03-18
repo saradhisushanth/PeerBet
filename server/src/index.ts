@@ -1,5 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 import express from "express";
 import http from "http";
 import cors from "cors";
@@ -90,6 +91,16 @@ app.use("/api/matches", matchRoutes);
 app.use("/api/bets", betRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/tournament", tournamentRoutes);
+
+// Serve built client (all-in-one deploy); SPA fallback for client-side routing
+const clientDist = path.join(projectRoot, "client", "dist");
+const clientIndexPath = path.join(clientDist, "index.html");
+if (fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(clientIndexPath);
+  });
+}
 
 app.use(errorHandler);
 

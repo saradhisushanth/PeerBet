@@ -1,0 +1,17 @@
+# Render blueprint: all-in-one (client + server). Set DATABASE_URL in dashboard.
+services:
+  - type: web
+    name: peernet
+    runtime: node
+    buildCommand: |
+      npm install
+      cd server && npm install && npm run build
+      npx prisma generate
+      npx prisma migrate deploy
+      cd ../client && npm install && npm run build
+    startCommand: node server/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
