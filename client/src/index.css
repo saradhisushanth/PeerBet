@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100;
+  }
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Ensure draggable player chips show grab cursor (overrides text cursor on hover) */
+[data-draggable-chip],
+[data-draggable-chip]:hover,
+[data-draggable-chip] *,
+[data-draggable-chip]:hover * {
+  cursor: grab !important;
+}
+[data-draggable-chip]:active,
+[data-draggable-chip]:active * {
+  cursor: grabbing !important;
+}
+
+/* Smooth number transition when stake/amount changes (masks flicker) */
+@keyframes stake-value-in {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.stake-value-transition {
+  display: inline-block;
+  animation: stake-value-in 0.22s ease-out;
+}

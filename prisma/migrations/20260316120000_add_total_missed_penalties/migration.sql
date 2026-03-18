@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "totalMissedPenalties" DOUBLE PRECISION NOT NULL DEFAULT 0;

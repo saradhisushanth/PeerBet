@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../server/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                      String   @id @default(uuid())
+  username                String   @unique
+  email                   String   @unique
+  passwordHash            String
+  balance                 Float    @default(1000)
+  /** Sum of entry fee + admin-approved top-ups; counts toward tournament prize pool. */
+  prizePoolContribution   Float    @default(0)
+  consecutiveMissedMatches Int     @default(0)
+  /** Cumulative rupees deducted for missed matches (2nd, 3rd, … miss). */
+  totalMissedPenalties     Float    @default(0)
+  createdAt               DateTime @default(now())
+
+  bets              Bet[]
+  betHistory        BetHistory[]
+  leaderboard       Leaderboard?
+  walletTransactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  amount      Float
+  /** Admin who approved the top-up. */
+  approvedBy  String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  shortName String   @unique
+  logoUrl   String?
+
+  players     Player[]
+  homeMatches Match[]  @relation("HomeTeam")
+  awayMatches Match[]  @relation("AwayTeam")
+  wonMatches  Match[]  @relation("WinnerTeam")
+  bets        Bet[]    @relation("SelectedTeam")
+}
+
+model Player {
+  id       String     @id @default(uuid())
+  name     String
+  role     PlayerRole
+  teamId   String
+  imageUrl String?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+model Match {
+  id               String      @id @default(uuid())
+  homeTeamId       String
+  awayTeamId       String
+  winnerTeamId     String?
+  venue            String
+  startTime        DateTime
+  tossTime         DateTime?   // Betting closes at toss; if null, closes at startTime
+  status           MatchStatus @default(UPCOMING)
+  /** Set when betting has closed and auto-assign (last 2 by leaderboard → other side) has been applied. */
+  bettingLockedAt  DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  homeTeam   Team         @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team         @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  winner     Team?        @relation("WinnerTeam", fields: [winnerTeamId], references: [id])
+  bets       Bet[]
+  betHistory BetHistory[]
+
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([status])
+}
+
+model Bet {
+  id             String    @id @default(uuid())
+  userId         String
+  matchId        String
+  selectedTeamId String
+  amount         Float
+  oddsMultiplier Float     @default(2)
+  insured        Boolean   @default(false)
+  status         BetStatus @default(PENDING)
+  createdAt      DateTime  @default(now())
+
+  user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match        Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  selectedTeam Team  @relation("SelectedTeam", fields: [selectedTeamId], references: [id])
+
+  @@index([userId])
+  @@index([matchId])
+  @@index([status])
+}
+
+model BetHistory {
+  id                 String    @id @default(uuid())
+  userId             String
+  matchId            String
+  betAmount          Float
+  payout             Float
+  result             BetResult
+  winningStreakAfter Int?      // After this match (wins in a row); 0 for loss
+  streakBonus        Float?    // Bonus paid for this win (2nd–5th consecutive)
+  createdAt          DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([matchId])
+}
+
+model Leaderboard {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  totalWins     Int      @default(0)
+  totalLosses   Int      @default(0)
+  profit        Float    @default(0)
+  underdogBonus Float    @default(0)
+  rank          Int?
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([profit])
+  @@index([rank])
+}
+
+enum PlayerRole {
+  BATSMAN
+  BOWLER
+  ALL_ROUNDER
+  WICKET_KEEPER
+}
+
+enum MatchStatus {
+  UPCOMING
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  CANCELLED
+}
+
+enum BetResult {
+  WIN
+  LOSS
+  CANCELLED
+}

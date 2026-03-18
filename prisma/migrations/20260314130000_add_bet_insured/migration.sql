@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Bet" ADD COLUMN "insured" BOOLEAN NOT NULL DEFAULT false;
