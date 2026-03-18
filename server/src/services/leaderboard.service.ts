@@ -12,7 +12,7 @@ export const leaderboardService = {
         totalMissedPenalties: true,
       },
     });
-    const entries = users.map((u) => {
+    const entries = users.map((u: { id: string; username: string; balance: number | null; leaderboard: { totalWins: number; totalLosses: number; profit: number; underdogBonus: number } | null; totalMissedPenalties?: number | null }) => {
       const balance = u.balance ?? 0;
       const profit = u.leaderboard?.profit ?? 0;
       const missedPenalties = (u as { totalMissedPenalties?: number }).totalMissedPenalties ?? 0;
@@ -28,8 +28,8 @@ export const leaderboardService = {
         rank: null as number | null,
       };
     });
-    entries.sort((a, b) => b.balance - a.balance);
-    entries.forEach((e, i) => {
+    entries.sort((a: { balance: number }, b: { balance: number }) => b.balance - a.balance);
+    entries.forEach((e: { rank: number | null }, i: number) => {
       e.rank = i + 1;
     });
     return entries.slice(0, limit);

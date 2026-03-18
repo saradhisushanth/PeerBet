@@ -23,19 +23,20 @@ export const settlementService = {
 
     if (bets.length === 0) return { results: [], underdogTeamId: null };
 
+    type BetItem = (typeof bets)[number];
     const totalWinningStake = bets
-      .filter((b) => b.selectedTeamId === winnerTeamId)
-      .reduce((sum, b) => sum + b.amount, 0);
+      .filter((b: BetItem) => b.selectedTeamId === winnerTeamId)
+      .reduce((sum: number, b: BetItem) => sum + b.amount, 0);
     const losingPool = bets
-      .filter((b) => b.selectedTeamId !== winnerTeamId)
-      .reduce((sum, b) => sum + b.amount, 0);
+      .filter((b: BetItem) => b.selectedTeamId !== winnerTeamId)
+      .reduce((sum: number, b: BetItem) => sum + b.amount, 0);
 
-    const homeBets = bets.filter((b) => b.selectedTeamId === match.homeTeamId);
-    const awayBets = bets.filter((b) => b.selectedTeamId === match.awayTeamId);
+    const homeBets = bets.filter((b: BetItem) => b.selectedTeamId === match.homeTeamId);
+    const awayBets = bets.filter((b: BetItem) => b.selectedTeamId === match.awayTeamId);
     const homePlayerCount = homeBets.length;
     const awayPlayerCount = awayBets.length;
-    const homeStake = homeBets.reduce((s, b) => s + b.amount, 0);
-    const awayStake = awayBets.reduce((s, b) => s + b.amount, 0);
+    const homeStake = homeBets.reduce((s: number, b: BetItem) => s + b.amount, 0);
+    const awayStake = awayBets.reduce((s: number, b: BetItem) => s + b.amount, 0);
     // Underdog = fewer players; if tied, less total stake; if equal players and equal stake, away
     const underdogTeamId =
       homePlayerCount < awayPlayerCount
@@ -48,7 +49,7 @@ export const settlementService = {
               ? match.awayTeamId
               : match.awayTeamId; // equal players and equal stake
 
-    const participantIds = new Set(bets.map((b) => b.userId));
+    const participantIds = new Set(bets.map((b: BetItem) => b.userId));
     const isSoloMatch = participantIds.size === 1;
 
     const round2 = (n: number) => Math.round(n * 100) / 100;

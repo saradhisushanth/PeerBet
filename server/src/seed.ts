@@ -129,7 +129,7 @@ async function main() {
     const startMonth = 2; // March = 2 (0-indexed)
     const baseDate = new Date(startYear, startMonth, 28, 19, 30, 0); // 7:30 PM
 
-    for (const [homeIdx, awayIdx, dayOffset, _venueIdx, venueName] of FIXTURES) {
+    for (const [homeIdx, awayIdx, dayOffset, _venueIdx, venueName] of FIXTURES as [number, number, number, number, string][]) {
       const homeTeam = teamsByShort[shortNames[homeIdx]];
       const awayTeam = teamsByShort[shortNames[awayIdx]];
       if (!homeTeam || !awayTeam) throw new Error(`Team not found for fixture ${homeIdx} vs ${awayIdx}`);

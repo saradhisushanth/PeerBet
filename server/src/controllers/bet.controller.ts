@@ -43,7 +43,6 @@ export const betController = {
       }
       const bet = await betService.cancel(userId, matchId);
       if (bet) {
-        io.to(`match:${matchId}`).emit("betPlaced", { matchId, userId });
         io.to(`match:${matchId}`).emit("betRemoved", {
           matchId,
           userId,

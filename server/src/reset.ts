@@ -7,6 +7,7 @@
  *
  * Run: npm run db:reset (from server dir) or npx tsx src/reset.ts
  */
+import type { Prisma } from "./generated/prisma/client";
 import { prisma } from "./lib/prisma.js";
 
 const INITIAL_BALANCE = 1000;
@@ -14,7 +15,7 @@ const INITIAL_BALANCE = 1000;
 async function main() {
   console.log("Starting full data reset...");
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const deletedHistory = await tx.betHistory.deleteMany({});
     console.log(`  Deleted ${deletedHistory.count} bet history records`);
 

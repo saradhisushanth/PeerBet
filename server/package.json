@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp -r src/generated dist/",
     "start": "node dist/index.js",
     "db:reset": "tsx src/reset.ts",
     "db:seed": "tsx src/seed.ts"

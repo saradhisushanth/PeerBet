@@ -66,13 +66,14 @@ export const matchService = {
       take: 20,
     });
 
-    const totalPool = bets.reduce((sum, b) => sum + b.amount, 0);
-    const homeStake = bets.filter((b) => b.selectedTeamId === match.homeTeamId).reduce((sum, b) => sum + b.amount, 0);
-    const awayStake = bets.filter((b) => b.selectedTeamId === match.awayTeamId).reduce((sum, b) => sum + b.amount, 0);
+    type BetWithUser = (typeof bets)[number];
+    const totalPool = bets.reduce((sum: number, b: BetWithUser) => sum + b.amount, 0);
+    const homeStake = bets.filter((b: BetWithUser) => b.selectedTeamId === match.homeTeamId).reduce((sum: number, b: BetWithUser) => sum + b.amount, 0);
+    const awayStake = bets.filter((b: BetWithUser) => b.selectedTeamId === match.awayTeamId).reduce((sum: number, b: BetWithUser) => sum + b.amount, 0);
     const homePercent = totalPool > 0 ? Math.round((homeStake / totalPool) * 100) : 50;
     const awayPercent = totalPool > 0 ? Math.round((awayStake / totalPool) * 100) : 50;
 
-    const recentBets = bets.map((b) => ({
+    const recentBets = bets.map((b: BetWithUser) => ({
       id: b.id,
       username: b.user.username,
       teamShortName: b.selectedTeam.shortName,
@@ -86,8 +87,9 @@ export const matchService = {
         where: { matchId },
         select: { userId: true, betAmount: true, payout: true, winningStreakAfter: true, streakBonus: true },
       });
+      type HistoryRow = (typeof history)[number];
       const historyByUser = new Map(
-        history.map((h) => [
+        history.map((h: HistoryRow) => [
           h.userId,
           {
             betAmount: h.betAmount,
@@ -101,10 +103,11 @@ export const matchService = {
         where: { matchId, status: { in: ["WON", "LOST"] } },
         include: { user: { select: { username: true } } },
       });
+      type SettledBet = (typeof settledBets)[number];
       settlementResults = settledBets
-        .map((b) => {
+        .map((b: SettledBet) => {
           const h = historyByUser.get(b.userId);
-          const payout = h?.payout ?? 0;
+          const payout = (h as { payout: number } | undefined)?.payout ?? 0;
           const stake = b.amount;
           const poolGained = Math.round((payout - stake) * 100) / 100;
           const side = b.selectedTeamId === match.homeTeamId ? match.homeTeam.shortName : match.awayTeam.shortName;
@@ -114,11 +117,11 @@ export const matchService = {
             side,
             stake,
             poolGained,
-            ...(h?.winningStreakAfter != null && { winningStreakAfter: h.winningStreakAfter }),
-            ...(h?.streakBonus != null && h.streakBonus > 0 && { streakBonus: h.streakBonus }),
+            ...((h as { winningStreakAfter: number | null })?.winningStreakAfter != null && { winningStreakAfter: (h as { winningStreakAfter: number }).winningStreakAfter }),
+            ...((h as { streakBonus: number | null })?.streakBonus != null && (h as { streakBonus: number }).streakBonus > 0 && { streakBonus: (h as { streakBonus: number }).streakBonus }),
           };
         })
-        .sort((a, b) => b.poolGained - a.poolGained);
+        .sort((a: { poolGained: number }, b: { poolGained: number }) => b.poolGained - a.poolGained);
     }
 
     return {
@@ -150,7 +153,10 @@ export const matchService = {
       },
       select: { userId: true, selectedTeamId: true, amount: true, insured: true },
     });
-    const userToBet = new Map(bets.map((b) => [b.userId, { teamId: b.selectedTeamId, amount: b.amount, insured: b.insured }]));
+    type BoardBet = { userId: string; selectedTeamId: string; amount: number; insured: boolean | null };
+    const userToBet = new Map<string, { teamId: string; amount: number; insured: boolean | null }>(
+      (bets as BoardBet[]).map((b) => [b.userId, { teamId: b.selectedTeamId, amount: b.amount, insured: b.insured }])
+    );
 
     const onHome: { userId: string; username: string; amount: number; insured: boolean }[] = [];
     const onAway: { userId: string; username: string; amount: number; insured: boolean }[] = [];
@@ -159,8 +165,8 @@ export const matchService = {
     for (const u of allUsers) {
       const bet = userToBet.get(u.id);
       const row = { userId: u.id, username: u.username };
-      if (bet?.teamId === match.homeTeamId) onHome.push({ ...row, amount: bet.amount, insured: bet.insured });
-      else if (bet?.teamId === match.awayTeamId) onAway.push({ ...row, amount: bet.amount, insured: bet.insured });
+      if (bet?.teamId === match.homeTeamId) onHome.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
+      else if (bet?.teamId === match.awayTeamId) onAway.push({ ...row, amount: bet.amount, insured: bet.insured ?? false });
       else undecided.push(row);
     }
 

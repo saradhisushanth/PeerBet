@@ -20,9 +20,10 @@ export const tournamentService = {
       orderBy: { username: "asc" },
     });
 
-    const totalPrizePool = users.reduce((s, u) => s + (u.prizePoolContribution ?? 0), 0);
+    type UserRow = (typeof users)[number];
+    const totalPrizePool = users.reduce((s: number, u: UserRow) => s + (u.prizePoolContribution ?? 0), 0);
 
-    const balanceSheet = users.map((u) => ({
+    const balanceSheet = users.map((u: UserRow) => ({
       userId: u.id,
       username: u.username,
       balance: u.balance ?? 0,
@@ -51,7 +52,7 @@ export const tournamentService = {
       houseCutPercent: HOUSE_CUT_PERCENT,
       houseCutAmount,
       balanceSheet,
-      transactions: transactions.map((t) => ({
+      transactions: transactions.map((t: (typeof transactions)[number]) => ({
         id: t.id,
         userId: t.userId,
         username: t.user.username,
