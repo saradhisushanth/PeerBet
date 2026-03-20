@@ -1,12 +1,18 @@
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-// Load .env before reading DATABASE_URL (prisma is often imported before index.ts runs dotenv)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "../../..");
+function findProjectRoot(dir: string): string {
+  if (fs.existsSync(path.join(dir, "prisma", "schema.prisma"))) return dir;
+  const parent = path.dirname(dir);
+  if (parent === dir) return dir;
+  return findProjectRoot(parent);
+}
+const projectRoot = findProjectRoot(__dirname);
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
 let connectionString = process.env.DATABASE_URL!;

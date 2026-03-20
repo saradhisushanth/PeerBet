@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "prebuild": "cd .. && npx prisma generate",
-    "build": "tsc && cp -r src/generated dist/",
-    "start": "node dist/index.js",
+    "build": "tsc --noEmit",
+    "start": "npx tsx src/index.ts",
     "db:reset": "tsx src/reset.ts",
     "db:seed": "tsx src/seed.ts"
   },
@@ -18,7 +18,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "tsx": "^4.19.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -27,7 +28,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.13.10",
     "prisma": "^7.5.0",
-    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }
 }

@@ -20,7 +20,13 @@ import { errorHandler } from "./middlewares/errorHandler.js";
 import { authService } from "./services/auth.service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "../..");
+function findProjectRoot(dir: string): string {
+  if (fs.existsSync(path.join(dir, "prisma", "schema.prisma"))) return dir;
+  const parent = path.dirname(dir);
+  if (parent === dir) return dir;
+  return findProjectRoot(parent);
+}
+const projectRoot = findProjectRoot(__dirname);
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
 if (!process.env.DATABASE_URL) {

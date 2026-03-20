@@ -9,7 +9,7 @@ services:
       cd server && npm install && npm run build
       cd .. && npx prisma migrate deploy
       cd client && npm install && npm run build
-    startCommand: node server/dist/index.js
+    startCommand: npx tsx server/src/index.ts
     envVars:
       - key: NODE_ENV
         value: production
