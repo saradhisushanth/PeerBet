@@ -68,6 +68,15 @@ export const matchController = {
         res.status(404).json({ success: false, error: "Match not found" });
         return;
       }
+
+      // Broadcast to every connected client so toss/lock times update immediately (not only users in match room)
+      io.emit("matchUpdate", {
+        matchId,
+        status: match.status,
+        startTime: match.startTime.toISOString(),
+        tossTime: match.tossTime != null ? match.tossTime.toISOString() : null,
+      });
+
       res.json({ success: true, data: match });
     } catch (err) {
       next(err);
@@ -101,7 +110,8 @@ export const matchController = {
       const match = await matchService.setWinner(matchId, winnerTeamId);
       const { results, underdogTeamId } = await settlementService.settleMatch(matchId, winnerTeamId);
 
-      io.to(`match:${matchId}`).emit("matchUpdate", {
+      // Broadcast so match status updates everywhere (not only clients in match room)
+      io.emit("matchUpdate", {
         matchId,
         status: "COMPLETED",
         winnerTeamId,

@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { rebalanceMatchIfLocked } from "./lockRebalance.service.js";
+import { UNDERDOG_MULTIPLIER } from "../../../shared/constants.js";
 
 export const matchService = {
   async getAll() {
@@ -81,7 +82,14 @@ export const matchService = {
       createdAt: b.createdAt,
     }));
 
-    let settlementResults: { userId: string; username: string; side: string; stake: number; poolGained: number; winningStreakAfter?: number; streakBonus?: number }[] | undefined;
+    type SettlementRow = {
+      userId: string; username: string; side: string; stake: number; poolGained: number;
+      basePoolShare?: number; underdogBonus?: number;
+      winningStreakAfter?: number; streakBonus?: number;
+    };
+    let settlementResults: SettlementRow[] | undefined;
+    let settlementMeta: { totalPool: number; losingPool: number; totalWinningStake: number; underdogSide?: string } | undefined;
+
     if (match.status === "COMPLETED") {
       const history = await prisma.betHistory.findMany({
         where: { matchId },
@@ -104,19 +112,57 @@ export const matchService = {
         include: { user: { select: { username: true } } },
       });
       type SettledBet = (typeof settledBets)[number];
+
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const winnerTeamId = (match as { winnerTeamId?: string | null }).winnerTeamId;
+      const winBets = settledBets.filter((b: SettledBet) => b.selectedTeamId === winnerTeamId);
+      const loseBets = settledBets.filter((b: SettledBet) => b.selectedTeamId !== winnerTeamId);
+      const totalWinStake = winBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
+      const losePool = loseBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
+      const fullPool = totalWinStake + losePool;
+
+      const homeBets = settledBets.filter((b: SettledBet) => b.selectedTeamId === match.homeTeamId);
+      const awayBets = settledBets.filter((b: SettledBet) => b.selectedTeamId === match.awayTeamId);
+      const homePlayerCount = homeBets.length;
+      const awayPlayerCount = awayBets.length;
+      const homeTotal = homeBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
+      const awayTotal = awayBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
+      const underdogTeamId =
+        homePlayerCount < awayPlayerCount ? match.homeTeamId
+        : awayPlayerCount < homePlayerCount ? match.awayTeamId
+        : homeTotal < awayTotal ? match.homeTeamId
+        : awayTotal < homeTotal ? match.awayTeamId
+        : match.awayTeamId;
+      const underdogSide = underdogTeamId === match.homeTeamId ? match.homeTeam.shortName : match.awayTeam.shortName;
+
+      settlementMeta = { totalPool: fullPool, losingPool: losePool, totalWinningStake: totalWinStake, underdogSide };
+
       settlementResults = settledBets
         .map((b: SettledBet) => {
           const h = historyByUser.get(b.userId);
           const payout = (h as { payout: number } | undefined)?.payout ?? 0;
           const stake = b.amount;
-          const poolGained = Math.round((payout - stake) * 100) / 100;
+          const poolGained = round2(payout - stake);
           const side = b.selectedTeamId === match.homeTeamId ? match.homeTeam.shortName : match.awayTeam.shortName;
+          const won = b.selectedTeamId === winnerTeamId;
+
+          let basePoolShare: number | undefined;
+          let underdogBonusAmt: number | undefined;
+          if (won && totalWinStake > 0) {
+            const rawShare = round2((stake / totalWinStake) * losePool);
+            const isUnderdog = b.selectedTeamId === underdogTeamId;
+            basePoolShare = rawShare;
+            underdogBonusAmt = isUnderdog ? round2(rawShare * (UNDERDOG_MULTIPLIER - 1)) : 0;
+          }
+
           return {
             userId: b.userId,
             username: b.user.username,
             side,
             stake,
             poolGained,
+            ...(basePoolShare != null && { basePoolShare }),
+            ...(underdogBonusAmt != null && underdogBonusAmt > 0 && { underdogBonus: underdogBonusAmt }),
             ...((h as { winningStreakAfter: number | null })?.winningStreakAfter != null && { winningStreakAfter: (h as { winningStreakAfter: number }).winningStreakAfter }),
             ...((h as { streakBonus: number | null })?.streakBonus != null && (h as { streakBonus: number }).streakBonus > 0 && { streakBonus: (h as { streakBonus: number }).streakBonus }),
           };
@@ -130,6 +176,7 @@ export const matchService = {
       momentum: { homePercent, awayPercent },
       recentBets,
       ...(settlementResults != null && { settlementResults }),
+      ...(settlementMeta != null && { settlementMeta }),
     };
   },
 

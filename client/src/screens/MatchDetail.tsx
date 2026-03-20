@@ -15,6 +15,7 @@ import {
   TOSS_DEFAULT_MINUTES_BEFORE_MATCH,
 } from "@shared/constants";
 import PlayerBettingBoard from "../components/PlayerBettingBoard";
+import ProfitBreakdown from "../components/ProfitBreakdown";
 import { formatCurrency, formatNumber } from "../utils/format";
 
 const STAKE_STEP = 10;
@@ -71,7 +72,8 @@ interface MatchSummary {
   totalPool: number;
   momentum: { homePercent: number; awayPercent: number };
   recentBets: { id: string; username: string; teamShortName: string; amount: number; createdAt: string }[];
-  settlementResults?: { userId: string; username: string; side: string; stake: number; poolGained: number; winningStreakAfter?: number; streakBonus?: number }[];
+  settlementResults?: { userId: string; username: string; side: string; stake: number; poolGained: number; basePoolShare?: number; underdogBonus?: number; winningStreakAfter?: number; streakBonus?: number }[];
+  settlementMeta?: { totalPool: number; losingPool: number; totalWinningStake: number; underdogSide?: string };
 }
 
 export default function MatchDetail() {
@@ -456,6 +458,9 @@ export default function MatchDetail() {
   async function handleCancelBetFromDrop() {
     if (!user || !id) return;
 
+    // Preserve the current stake so pool/balance changes from cancellation don't clamp it
+    setStakeProtected(stake, 3000);
+
     // Optimistic update: move chip back to undecided
     const prevBoard = board;
     if (board) {
@@ -516,6 +521,14 @@ export default function MatchDetail() {
 
   const home = selectedMatch.homeTeam;
   const away = selectedMatch.awayTeam;
+
+  const teamBarColor: Record<string, string> = {
+    RCB: "bg-red-600", SRH: "bg-orange-500", MI: "bg-blue-600",
+    CSK: "bg-amber-400", KKR: "bg-purple-600", DC: "bg-indigo-600",
+    RR: "bg-rose-500", PBKS: "bg-red-700", GT: "bg-slate-500",
+    LSG: "bg-green-600",
+  };
+
   const isUpcoming = selectedMatch.status === "UPCOMING";
   const bettingOpen = isUpcoming && countdown > 0;
   const isAdmin = user?.username === ADMIN_USERNAME;
@@ -625,13 +638,13 @@ export default function MatchDetail() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4" title="Share of total stake on each team (not odds)">
             <h3 className="text-xs font-semibold text-gray-400 mb-2">Momentum</h3>
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>{home.shortName} <span className="font-medium text-gray-300">{momentumHome}%</span></span>
-                <span>{away.shortName} <span className="font-medium text-gray-300">{momentumAway}%</span></span>
+              <div className="flex justify-between text-sm font-medium">
+                <span>{home.shortName} <span className="text-gray-300">{momentumHome}%</span></span>
+                <span>{away.shortName} <span className="text-gray-300">{momentumAway}%</span></span>
               </div>
               <div className="h-2 bg-gray-800 rounded-full overflow-hidden flex">
-                <div className="bg-primary-500 h-full transition-all" style={{ width: `${momentumHome}%` }} title={`${home.shortName} ${momentumHome}%`} />
-                <div className="bg-accent-500/80 h-full" style={{ width: `${momentumAway}%` }} title={`${away.shortName} ${momentumAway}%`} />
+                <div className={`${teamBarColor[home.shortName] ?? "bg-primary-500"} h-full transition-all`} style={{ width: `${momentumHome}%` }} title={`${home.shortName} ${momentumHome}%`} />
+                <div className={`${teamBarColor[away.shortName] ?? "bg-accent-500"} h-full`} style={{ width: `${momentumAway}%` }} title={`${away.shortName} ${momentumAway}%`} />
               </div>
             </div>
           </div>
@@ -694,6 +707,29 @@ export default function MatchDetail() {
               </div>
             </div>
           )}
+
+          {/* Profit breakdown for current user (winners only) */}
+          {(() => {
+            const myResult = user && settlementResults.find((r) => r.userId === user.id);
+            const meta = summary?.settlementMeta;
+            if (!myResult || myResult.poolGained <= 0 || !meta) return null;
+            const isUnderdog = meta.underdogSide === myResult.side;
+            return (
+              <ProfitBreakdown
+                stake={myResult.stake}
+                basePoolShare={myResult.basePoolShare ?? 0}
+                underdogBonus={myResult.underdogBonus ?? 0}
+                streakBonus={myResult.streakBonus ?? 0}
+                totalPool={meta.totalPool}
+                losingPool={meta.losingPool}
+                totalWinningStake={meta.totalWinningStake}
+                underdogSide={meta.underdogSide}
+                playerSide={myResult.side}
+                isUnderdog={isUnderdog}
+              />
+            );
+          })()}
+
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col h-52">
             <h3 className="text-xs font-semibold text-gray-400 px-3 py-2 border-b border-gray-800 shrink-0" title="Recent bets and bet removals for this match">History Feed</h3>
             <div className="divide-y divide-gray-800 min-h-0 flex-1 overflow-y-auto">

@@ -37,6 +37,9 @@ export interface MatchUpdatePayload {
   matchId: string;
   status: string;
   winnerTeamId?: string;
+  /** ISO datetimes when admin updates schedule (broadcast so all clients update without refresh) */
+  startTime?: string;
+  tossTime?: string | null;
 }
 
 export interface BetPlacedPayload {

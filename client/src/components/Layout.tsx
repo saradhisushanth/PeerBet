@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import type { WalletTopUpPayload } from "@shared/types";
+import type { MatchUpdatePayload, WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
 import { useMatchStore } from "../store/matchStore";
 import { useBetStore, type Bet } from "../store/betStore";
@@ -20,6 +20,7 @@ export default function Layout() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const setMatches = useMatchStore((s) => s.setMatches);
+  const applyMatchUpdateFromSocket = useMatchStore((s) => s.applyMatchUpdateFromSocket);
   const setBets = useBetStore((s) => s.setBets);
   const setLeaderboard = useLeaderboardStore((s) => s.setEntries);
 
@@ -76,6 +77,14 @@ export default function Layout() {
     [user?.id, user?.balance, updateUser]
   );
   useSocketEvent("betSettled", onBetSettled);
+
+  const onMatchUpdate = useCallback(
+    (data: MatchUpdatePayload) => {
+      applyMatchUpdateFromSocket(data);
+    },
+    [applyMatchUpdateFromSocket]
+  );
+  useSocketEvent("matchUpdate", onMatchUpdate);
 
   function handleLogout() {
     setShowLogoutConfirm(true);
