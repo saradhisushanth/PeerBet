@@ -82,7 +82,7 @@ export default function MatchDetail() {
   const [stake, setStake] = useState(Math.max(MIN_STAKE, 300));
   const [stakeInputValue, setStakeInputValue] = useState(String(Math.max(MIN_STAKE, 300)));
   const [stakeAnimating, setStakeAnimating] = useState(false);
-  const [stakeCollapsed, setStakeCollapsed] = useState(true);
+  const [stakeCollapsed, setStakeCollapsed] = useState(false);
   const stakeInputFocusedRef = useRef(false);
   const lastBoardAmountRef = useRef<number | null>(null);
   const lastPlacedStakeRef = useRef<number | null>(null);
@@ -95,6 +95,14 @@ export default function MatchDetail() {
       lastPlacedStakeRef.current = null;
       lastPlacedStakeTimeoutRef.current = null;
     }, timeoutMs);
+  }
+  const [stakeLocked, setStakeLocked] = useState(false);
+  const [stakeWarning, setStakeWarning] = useState<string | null>(null);
+  const stakeWarningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function flashStakeWarning(msg: string) {
+    setStakeWarning(msg);
+    if (stakeWarningTimerRef.current) clearTimeout(stakeWarningTimerRef.current);
+    stakeWarningTimerRef.current = setTimeout(() => setStakeWarning(null), 5000);
   }
   const [insured, setInsured] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -129,6 +137,18 @@ export default function MatchDetail() {
     if (id) return api.matches.getBoard(id).then(setBoard);
     return Promise.resolve();
   }, [id]);
+
+  const debouncedRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefetch = useCallback(() => {
+    if (debouncedRefetchRef.current) clearTimeout(debouncedRefetchRef.current);
+    debouncedRefetchRef.current = setTimeout(() => {
+      fetchSummary();
+      fetchBoard();
+    }, 300);
+  }, [fetchSummary, fetchBoard]);
+  useEffect(() => {
+    return () => { if (debouncedRefetchRef.current) clearTimeout(debouncedRefetchRef.current); };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -238,6 +258,7 @@ export default function MatchDetail() {
   useEffect(() => {
     return () => {
       if (lastPlacedStakeTimeoutRef.current) clearTimeout(lastPlacedStakeTimeoutRef.current);
+      if (stakeWarningTimerRef.current) clearTimeout(stakeWarningTimerRef.current);
     };
   }, []);
 
@@ -268,8 +289,8 @@ export default function MatchDetail() {
       ? board.onHome.find((p) => p.userId === user.id)?.amount ?? board.onAway.find((p) => p.userId === user.id)?.amount ?? 0
       : 0;
   const presentPoolForEffect = totalPoolForEffect - myBetForEffect;
-  const halfPoolForEffect = presentPoolForEffect > 0 ? Math.floor(presentPoolForEffect / 2) : MAX_STAKE;
-  const maxFromPoolForEffect = Math.max(MIN_STAKE, Math.min(halfPoolForEffect, MAX_STAKE));
+  const poolCapForEffect = presentPoolForEffect > 0 ? Math.floor(presentPoolForEffect) : MAX_STAKE;
+  const maxFromPoolForEffect = Math.max(MIN_STAKE, Math.min(poolCapForEffect, MAX_STAKE));
   const availableForEffect = (user?.balance ?? 0) + myBetForEffect;
   const maxStakeForEffect = Math.min(maxFromPoolForEffect, Math.max(0, availableForEffect - (insured ? INSURANCE_COST : 0)));
   useEffect(() => {
@@ -287,14 +308,12 @@ export default function MatchDetail() {
   useSocketEvent("matchUpdate", () => {
     if (id) {
       api.matches.getById(id).then((data) => setSelectedMatch(data as Match));
-      fetchSummary();
-      fetchBoard();
+      debouncedRefetch();
       api.auth.me().then((me) => updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches }));
     }
   });
   useSocketEvent("betPlaced", () => {
-    fetchSummary();
-    fetchBoard();
+    debouncedRefetch();
   });
 
   useSocketEvent("upsetAlert", (data) => {
@@ -307,8 +326,7 @@ export default function MatchDetail() {
       { id: `${data.userId}-${Date.now()}`, username: data.username, amount: data.amount, teamShortName: data.teamShortName, at: Date.now() },
       ...prev.slice(0, 19),
     ]);
-    fetchSummary();
-    fetchBoard();
+    debouncedRefetch();
   });
 
   async function handlePlaceBetFromDrop(teamId: string, amount: number) {
@@ -331,8 +349,8 @@ export default function MatchDetail() {
         ? board.onHome.find((p) => p.userId === user.id)?.amount ?? board.onAway.find((p) => p.userId === user.id)?.amount ?? 0
         : 0;
     const presentPoolVal = Number(pool) - myBetAmt;
-    const halfPoolVal = presentPoolVal > 0 ? Math.floor(presentPoolVal / 2) : MAX_STAKE;
-    const maxFromPool = Math.max(MIN_STAKE, Math.min(halfPoolVal, MAX_STAKE));
+    const poolCapVal = presentPoolVal > 0 ? Math.floor(presentPoolVal) : MAX_STAKE;
+    const maxFromPool = Math.max(MIN_STAKE, Math.min(poolCapVal, MAX_STAKE));
     const available = balanceBeforeThisMatch;
     const effectiveMaxStake = Math.min(maxFromPool, Math.max(0, available - (insured ? INSURANCE_COST : 0)));
 
@@ -345,8 +363,22 @@ export default function MatchDetail() {
       return;
     }
     if (amount > effectiveMaxStake) {
-      setError(`Stake too high. Max is ${formatCurrency(effectiveMaxStake)} (half of pool / balance cap).`);
+      setError(`Stake too high. Max is ${formatCurrency(effectiveMaxStake)} (pool / balance cap).`);
       return;
+    }
+
+    // Optimistic update: move chip immediately in local state
+    const prevBoard = board;
+    if (board && user) {
+      const me = { userId: user.id, username: user.username, amount, insured };
+      const withoutMe = (list: typeof board.onHome) => list.filter((p) => p.userId !== user.id);
+      const isHome = teamId === board.homeTeam.id;
+      setBoard({
+        ...board,
+        onHome: isHome ? [...withoutMe(board.onHome), me] : withoutMe(board.onHome),
+        onAway: isHome ? withoutMe(board.onAway) : [...withoutMe(board.onAway), me],
+        undecided: board.undecided.filter((p) => p.userId !== user.id),
+      });
     }
 
     setPlacing(true);
@@ -358,8 +390,9 @@ export default function MatchDetail() {
       setStakeProtected(amount, 2000);
       const me = await api.auth.me();
       updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches });
-      await Promise.all([fetchSummary(), fetchBoard()]);
+      debouncedRefetch();
     } catch (err) {
+      setBoard(prevBoard);
       setError(err instanceof Error ? err.message : "Failed to place bet");
     } finally {
       setPlacing(false);
@@ -423,6 +456,20 @@ export default function MatchDetail() {
 
   async function handleCancelBetFromDrop() {
     if (!user || !id) return;
+
+    // Optimistic update: move chip back to undecided
+    const prevBoard = board;
+    if (board) {
+      const withoutMe = (list: typeof board.onHome) => list.filter((p) => p.userId !== user.id);
+      const alreadyUndecided = board.undecided.some((p) => p.userId === user.id);
+      setBoard({
+        ...board,
+        onHome: withoutMe(board.onHome),
+        onAway: withoutMe(board.onAway),
+        undecided: alreadyUndecided ? board.undecided : [...board.undecided, { userId: user.id, username: user.username }],
+      });
+    }
+
     setPlacing(true);
     setError(null);
     setSuccess(null);
@@ -433,9 +480,9 @@ export default function MatchDetail() {
         setBalance(user.balance + refund);
         setSuccess("Bet cancelled");
       }
-      fetchSummary();
-      fetchBoard();
+      debouncedRefetch();
     } catch (err) {
+      setBoard(prevBoard);
       setError(err instanceof Error ? err.message : "Failed to cancel bet");
     } finally {
       setPlacing(false);
@@ -478,8 +525,8 @@ export default function MatchDetail() {
   const totalPoolNum = Number(totalPool);
   const presentPool = totalPoolNum - myBetAmount;
   const participantCount = board ? board.onHome.length + board.onAway.length : 0;
-  const halfPoolNum = presentPool > 0 ? Math.floor(presentPool / 2) : MAX_STAKE;
-  const maxStakeFromPool = Math.max(MIN_STAKE, Math.min(halfPoolNum, MAX_STAKE));
+  const poolCapNum = presentPool > 0 ? Math.floor(presentPool) : MAX_STAKE;
+  const maxStakeFromPool = Math.max(MIN_STAKE, Math.min(poolCapNum, MAX_STAKE));
   const availableBalance = (user?.balance ?? 0) + myBetAmount;
   const maxStakeFromBalance = Math.max(0, availableBalance - (insured ? INSURANCE_COST : 0));
   const maxStake = Math.min(maxStakeFromPool, maxStakeFromBalance);
@@ -785,21 +832,46 @@ export default function MatchDetail() {
                       {myBetInsured && <span className="text-amber-400 ml-1">🛡 Insured</span>}
                     </p>
                   )}
+                  {stakeWarning && (
+                    <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-2 py-1.5 border border-red-500/30 animate-pulse">
+                      {stakeWarning}
+                    </p>
+                  )}
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 flex-1 min-w-0" />
+                    <button
+                      type="button"
+                      onClick={() => setStakeLocked((l) => !l)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        stakeLocked
+                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                          : "bg-gray-700 text-gray-300 border border-gray-600 hover:bg-gray-600"
+                      }`}
+                      title={stakeLocked ? "Stake is locked. Tap to unlock and adjust." : "Lock your stake to prevent accidental changes."}
+                    >
+                      {stakeLocked ? "🔒 Unlock" : "🔓 Lock Stake"}
+                    </button>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        disabled={placing || maxStake < MIN_STAKE}
+                        disabled={placing || maxStake < MIN_STAKE || stakeLocked}
                         onClick={() => {
                           const current = parseInt(stakeInputValue, 10) || stake;
-                          const newStake = Math.max(MIN_STAKE, Math.min(current - STAKE_STEP, maxStake));
+                          const attempted = current - STAKE_STEP;
+                          if (attempted < MIN_STAKE) {
+                            flashStakeWarning(`Minimum stake is ${formatCurrency(MIN_STAKE)}. Cannot go lower.`);
+                            if (current > MIN_STAKE) {
+                              setStake(MIN_STAKE);
+                              setStakeInputValue(String(MIN_STAKE));
+                              setStakeProtected(MIN_STAKE);
+                              if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, MIN_STAKE);
+                            }
+                            return;
+                          }
+                          const newStake = Math.max(MIN_STAKE, Math.min(attempted, maxStake));
                           setStake(newStake);
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
-                          if (user && id && userBetTeamId && bettingOpen) {
-                            handlePlaceBetFromDrop(userBetTeamId, newStake);
-                          }
+                          if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, newStake);
                         }}
                         className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
                       >
@@ -812,39 +884,51 @@ export default function MatchDetail() {
                           max={maxStake}
                           step={1}
                           value={stakeInputValue}
-                          disabled={maxStake < MIN_STAKE}
+                          disabled={maxStake < MIN_STAKE || stakeLocked}
                           onFocus={() => { stakeInputFocusedRef.current = true; }}
-                        onBlur={() => {
-                          stakeInputFocusedRef.current = false;
-                          const n = Math.floor(Number(stakeInputValue));
-                          const clamped = Number.isNaN(n) || n < MIN_STAKE
-                            ? MIN_STAKE
-                            : Math.min(n, maxStake);
-                          const finalStake = Math.floor(clamped);
-                          setStake(finalStake);
-                          setStakeInputValue(String(finalStake));
-                          setStakeProtected(finalStake);
-                          if (user && id && userBetTeamId && bettingOpen && !placing) {
-                            handlePlaceBetFromDrop(userBetTeamId, finalStake);
-                          }
-                        }}
+                          onBlur={() => {
+                            stakeInputFocusedRef.current = false;
+                            const n = Math.floor(Number(stakeInputValue));
+                            if (!Number.isNaN(n) && n < MIN_STAKE) {
+                              flashStakeWarning(`Minimum stake is ${formatCurrency(MIN_STAKE)}. Adjusted to minimum.`);
+                            } else if (!Number.isNaN(n) && n > maxStake) {
+                              flashStakeWarning(`Maximum stake is ${formatCurrency(maxStake)} (pool / balance cap). Adjusted to max.`);
+                            }
+                            const clamped = Number.isNaN(n) || n < MIN_STAKE ? MIN_STAKE : Math.min(n, maxStake);
+                            const finalStake = Math.floor(clamped);
+                            setStake(finalStake);
+                            setStakeInputValue(String(finalStake));
+                            setStakeProtected(finalStake);
+                            if (user && id && userBetTeamId && bettingOpen && !placing) handlePlaceBetFromDrop(userBetTeamId, finalStake);
+                          }}
                           onChange={(e) => setStakeInputValue(toIntegerStake(e.target.value))}
-                          className="w-16 text-center font-bold bg-gray-800 border border-gray-600 rounded-lg px-1 py-1.5 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 text-center font-bold border rounded-lg px-1 py-1.5 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                            stakeLocked ? "bg-gray-900 border-amber-500/40 text-amber-400" : "bg-gray-800 border-gray-600"
+                          }`}
                           aria-label="Stake amount"
                         />
                       </span>
                       <button
                         type="button"
-                        disabled={placing || maxStake < MIN_STAKE}
+                        disabled={placing || maxStake < MIN_STAKE || stakeLocked}
                         onClick={() => {
                           const current = parseInt(stakeInputValue, 10) || stake;
-                          const newStake = Math.min(current + STAKE_STEP, maxStake);
+                          const attempted = current + STAKE_STEP;
+                          if (attempted > maxStake) {
+                            flashStakeWarning(`Maximum stake is ${formatCurrency(maxStake)} (pool / balance cap). Cannot go higher.`);
+                            if (current < maxStake) {
+                              setStake(maxStake);
+                              setStakeInputValue(String(maxStake));
+                              setStakeProtected(maxStake);
+                              if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, maxStake);
+                            }
+                            return;
+                          }
+                          const newStake = Math.min(attempted, maxStake);
                           setStake(newStake);
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
-                          if (user && id && userBetTeamId && bettingOpen) {
-                            handlePlaceBetFromDrop(userBetTeamId, newStake);
-                          }
+                          if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, newStake);
                         }}
                         className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
                       >
@@ -854,12 +938,12 @@ export default function MatchDetail() {
                   </div>
                   {participantCount >= 1 && (
                     <>
-                      <p className="text-xs text-gray-500" title="Max is the lower of: half of current pool (excluding your bet) or your available balance">
-                        Min {formatCurrency(MIN_STAKE)} · Max {formatCurrency(maxStake)} (half of pool, capped by balance)
+                      <p className="text-xs text-gray-500" title="Max is the lower of: current pool (excluding your bet) or your available balance">
+                        Min {formatCurrency(MIN_STAKE)} · Max {formatCurrency(maxStake)} (pool, capped by balance)
                       </p>
                       {totalPool > 0 && (
                         <p className="text-xs text-amber-400/95 bg-amber-500/10 rounded-lg px-2 py-1.5 border border-amber-500/30">
-                          Max stake is half of the present pool ({formatCurrency(presentPool)} → {formatCurrency(halfPoolNum)}) or your balance. Your max: {formatCurrency(maxStake)}.
+                          Max stake is the present pool ({formatCurrency(presentPool)}) or your balance. Your max: {formatCurrency(maxStake)}.
                         </p>
                       )}
                     </>

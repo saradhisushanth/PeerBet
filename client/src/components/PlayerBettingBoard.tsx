@@ -212,9 +212,9 @@ export default function PlayerBettingBoard({
 }: PlayerBettingBoardProps) {
   const canBet = (bettingOpen !== undefined ? bettingOpen : isUpcoming) && canAffordBet;
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } })
   );
 
   const homePoolTotal = board.onHome.reduce((s, p) => s + p.amount, 0);

@@ -30,48 +30,30 @@ const IPL_2026_TEAMS = [
   { name: "Lucknow Super Giants", shortName: "LSG" },
 ];
 
-const VENUES = [
-  "M. Chinnaswamy Stadium, Bengaluru",
-  "Rajiv Gandhi International Stadium, Hyderabad",
-  "Wankhede Stadium, Mumbai",
-  "MA Chidambaram Stadium, Chennai",
-  "Eden Gardens, Kolkata",
-  "Arun Jaitley Stadium, Delhi",
-  "Sawai Mansingh Stadium, Jaipur",
-  "IS Bindra Stadium, Mohali",
-  "Narendra Modi Stadium, Ahmedabad",
-  "BRSABV Ekana Cricket Stadium, Lucknow",
+// Actual IPL 2026 Phase 1 schedule (BCCI confirmed, Mar 28 – Apr 12)
+// Times in IST: evening = 19:30, afternoon (double-header) = 15:30
+const FIXTURES: { home: string; away: string; date: string; time: string; venue: string }[] = [
+  { home: "RCB", away: "SRH", date: "2026-03-28", time: "19:30", venue: "M. Chinnaswamy Stadium, Bengaluru" },
+  { home: "MI",  away: "KKR", date: "2026-03-29", time: "19:30", venue: "Wankhede Stadium, Mumbai" },
+  { home: "RR",  away: "CSK", date: "2026-03-30", time: "19:30", venue: "ACA Stadium, Guwahati" },
+  { home: "PBKS",away: "GT",  date: "2026-03-31", time: "19:30", venue: "PCA Stadium, Mullanpur" },
+  { home: "LSG", away: "DC",  date: "2026-04-01", time: "19:30", venue: "BRSABV Ekana Cricket Stadium, Lucknow" },
+  { home: "KKR", away: "SRH", date: "2026-04-02", time: "19:30", venue: "Eden Gardens, Kolkata" },
+  { home: "CSK", away: "PBKS",date: "2026-04-03", time: "19:30", venue: "MA Chidambaram Stadium, Chennai" },
+  { home: "DC",  away: "MI",  date: "2026-04-04", time: "15:30", venue: "Arun Jaitley Stadium, Delhi" },
+  { home: "GT",  away: "RR",  date: "2026-04-04", time: "19:30", venue: "Narendra Modi Stadium, Ahmedabad" },
+  { home: "SRH", away: "LSG", date: "2026-04-05", time: "15:30", venue: "Rajiv Gandhi International Stadium, Hyderabad" },
+  { home: "RCB", away: "CSK", date: "2026-04-05", time: "19:30", venue: "M. Chinnaswamy Stadium, Bengaluru" },
+  { home: "KKR", away: "PBKS",date: "2026-04-06", time: "19:30", venue: "Eden Gardens, Kolkata" },
+  { home: "RR",  away: "MI",  date: "2026-04-07", time: "19:30", venue: "ACA Stadium, Guwahati" },
+  { home: "DC",  away: "GT",  date: "2026-04-08", time: "19:30", venue: "Arun Jaitley Stadium, Delhi" },
+  { home: "KKR", away: "LSG", date: "2026-04-09", time: "19:30", venue: "Eden Gardens, Kolkata" },
+  { home: "RR",  away: "RCB", date: "2026-04-10", time: "19:30", venue: "ACA Stadium, Guwahati" },
+  { home: "PBKS",away: "SRH", date: "2026-04-11", time: "15:30", venue: "PCA Stadium, Mullanpur" },
+  { home: "CSK", away: "DC",  date: "2026-04-11", time: "19:30", venue: "MA Chidambaram Stadium, Chennai" },
+  { home: "LSG", away: "GT",  date: "2026-04-12", time: "15:30", venue: "BRSABV Ekana Cricket Stadium, Lucknow" },
+  { home: "MI",  away: "RCB", date: "2026-04-12", time: "19:30", venue: "Wankhede Stadium, Mumbai" },
 ];
-
-// IPL 2026: March 28 - May 31. Sample fixture (opener RCB vs SRH, then variety)
-const FIXTURES: [number, number, number, number, string][] = [
-  [0, 1, 0, 28, "M. Chinnaswamy Stadium, Bengaluru"], // RCB vs SRH, Mar 28
-  [2, 3, 1, 29, "Wankhede Stadium, Mumbai"],          // MI vs CSK
-  [4, 5, 2, 30, "Eden Gardens, Kolkata"],             // KKR vs DC
-  [6, 7, 3, 31, "Sawai Mansingh Stadium, Jaipur"],   // RR vs PBKS
-  [8, 9, 4, 1, "Narendra Modi Stadium, Ahmedabad"],   // GT vs LSG
-  [1, 2, 5, 2, "Rajiv Gandhi International Stadium, Hyderabad"], // SRH vs MI
-  [3, 4, 6, 3, "MA Chidambaram Stadium, Chennai"],   // CSK vs KKR
-  [5, 6, 7, 4, "Arun Jaitley Stadium, Delhi"],       // DC vs RR
-  [7, 8, 8, 5, "IS Bindra Stadium, Mohali"],         // PBKS vs GT
-  [9, 0, 9, 6, "BRSABV Ekana Cricket Stadium, Lucknow"], // LSG vs RCB
-  [0, 3, 10, 7, "M. Chinnaswamy Stadium, Bengaluru"], // RCB vs CSK
-  [1, 4, 11, 8, "Rajiv Gandhi International Stadium, Hyderabad"], // SRH vs KKR
-  [2, 5, 12, 9, "Wankhede Stadium, Mumbai"],         // MI vs DC
-  [6, 8, 13, 10, "Sawai Mansingh Stadium, Jaipur"],  // RR vs GT
-  [7, 9, 14, 11, "IS Bindra Stadium, Mohali"],       // PBKS vs LSG
-  [0, 2, 15, 12, "M. Chinnaswamy Stadium, Bengaluru"], // RCB vs MI
-  [1, 3, 16, 13, "Rajiv Gandhi International Stadium, Hyderabad"], // SRH vs CSK
-  [4, 6, 17, 14, "Eden Gardens, Kolkata"],            // KKR vs RR
-  [5, 7, 18, 15, "Arun Jaitley Stadium, Delhi"],     // DC vs PBKS
-  [8, 9, 19, 16, "Narendra Modi Stadium, Ahmedabad"], // GT vs LSG
-];
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
 
 async function main() {
   console.log("Seeding IPL 2026 data...");
@@ -124,21 +106,18 @@ async function main() {
   if (existingMatches > 0) {
     console.log("Matches already exist. Skipping match seed.");
   } else {
-    const shortNames = IPL_2026_TEAMS.map((t) => t.shortName);
-    const startYear = 2026;
-    const startMonth = 2; // March = 2 (0-indexed)
-    const baseDate = new Date(startYear, startMonth, 28, 19, 30, 0); // 7:30 PM
-
-    for (const [homeIdx, awayIdx, dayOffset, _venueIdx, venueName] of FIXTURES as [number, number, number, number, string][]) {
-      const homeTeam = teamsByShort[shortNames[homeIdx]];
-      const awayTeam = teamsByShort[shortNames[awayIdx]];
-      if (!homeTeam || !awayTeam) throw new Error(`Team not found for fixture ${homeIdx} vs ${awayIdx}`);
-      const startTime = addDays(baseDate, dayOffset);
+    for (const f of FIXTURES) {
+      const homeTeam = teamsByShort[f.home];
+      const awayTeam = teamsByShort[f.away];
+      if (!homeTeam || !awayTeam) throw new Error(`Team not found: ${f.home} or ${f.away}`);
+      const [year, month, day] = f.date.split("-").map(Number);
+      const [hour, minute] = f.time.split(":").map(Number);
+      const startTime = new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30));
       await prisma.match.create({
         data: {
           homeTeamId: homeTeam.id,
           awayTeamId: awayTeam.id,
-          venue: venueName,
+          venue: f.venue,
           startTime,
           status: "UPCOMING",
         },

@@ -2,6 +2,8 @@ import { useAuthStore } from "../store/authStore";
 
 const BASE_URL = "/api";
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const token = useAuthStore.getState().token;
   const headers: Record<string, string> = {
@@ -9,10 +11,24 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
-    headers,
-    ...options,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${endpoint}`, {
+      headers,
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Request timed out. Server may be waking up — try again.");
+    }
+    throw new Error("Network error. Check your connection.");
+  }
+  clearTimeout(timer);
 
   if (!res.ok) {
     if (res.status === 401) {

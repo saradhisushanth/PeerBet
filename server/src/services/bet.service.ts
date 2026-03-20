@@ -65,7 +65,6 @@ export const betService = {
     const currentTotalPool = poolAgg._sum.amount ?? 0;
     const pendingBetCount = poolAgg._count.id ?? 0;
 
-    // Present pool = pool before this player's bet. Pot rule: max = half of present pool (or MAX_STAKE if pool empty). Also capped by balance.
     const refundAmount = existingBet?.amount ?? 0;
     const existingInsurance = existingBet && (existingBet as { insured?: boolean }).insured ? INSURANCE_COST : 0;
     const balance = (user as { balance?: number }).balance ?? 0;
@@ -73,12 +72,12 @@ export const betService = {
     const maxStakeByBalance = Math.max(0, availableBalance - (insured ? INSURANCE_COST : 0));
 
     const presentPool = currentTotalPool - (existingBet?.amount ?? 0);
-    const halfPool = presentPool > 0 ? Math.floor(Number(presentPool) / 2) : MAX_STAKE;
-    const maxAllowed = Math.max(MIN_STAKE, Math.min(halfPool, MAX_STAKE, maxStakeByBalance));
+    const poolCap = presentPool > 0 ? Math.floor(Number(presentPool)) : MAX_STAKE;
+    const maxAllowed = Math.max(MIN_STAKE, Math.min(poolCap, MAX_STAKE, maxStakeByBalance));
 
     if (stake > maxAllowed) {
       throw new BetError(
-        `Stake too high. Max is 💰 ${maxAllowed} (half of pool / balance cap). Your stake 💰 ${stake}.`,
+        `Stake too high. Max is 💰 ${maxAllowed} (pool / balance cap). Your stake 💰 ${stake}.`,
         400
       );
     }

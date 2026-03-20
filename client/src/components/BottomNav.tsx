@@ -6,7 +6,7 @@ const tabs = [
   { to: "/leaderboard", label: "Leaderboard", end: false, title: "Rankings by coin balance" },
   { to: "/tournament", label: "Tournament", end: false, title: "Tournament info and standings" },
   { to: "/history", label: "History", end: false, title: "Past matches and your results" },
-  { to: "/stats", label: "Stats", end: false, title: "Your overview, streak, and balance" },
+  { to: "/stats", label: "Profile", end: false, title: "Your profile, streak, and balance" },
 ] as const;
 
 const navContent = (

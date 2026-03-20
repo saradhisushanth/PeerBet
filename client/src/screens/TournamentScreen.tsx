@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../services/api";
 import { formatCurrency, formatNumber, formatPrizePool } from "../utils/format";
 import { ADMIN_USERNAME } from "@shared/constants";
 
 type Details = Awaited<ReturnType<typeof api.tournament.getDetails>>;
+
+const MAX_AUTO_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
 
 export default function TournamentScreen() {
   const user = useAuthStore((s) => s.user);
@@ -14,18 +17,40 @@ export default function TournamentScreen() {
   const [topUpUserId, setTopUpUserId] = useState("");
   const [topUpAmount, setTopUpAmount] = useState("");
   const [topUpSubmitting, setTopUpSubmitting] = useState(false);
+  const retryCountRef = useRef(0);
 
   const isAdmin = user?.username === ADMIN_USERNAME;
 
-  useEffect(() => {
+  const fetchDetails = useCallback((autoRetry = false) => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     api.tournament
       .getDetails()
-      .then(setDetails)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (cancelled) return;
+        setDetails(data);
+        retryCountRef.current = 0;
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (autoRetry && retryCountRef.current < MAX_AUTO_RETRIES) {
+          retryCountRef.current++;
+          setTimeout(() => { if (!cancelled) fetchDetails(true); }, RETRY_DELAY_MS);
+        } else {
+          setError(e instanceof Error ? e.message : "Failed to load");
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    retryCountRef.current = 0;
+    const cleanup = fetchDetails(true);
+    return cleanup;
+  }, [fetchDetails]);
 
   async function handleWalletTopUp(e: React.FormEvent) {
     e.preventDefault();
@@ -66,7 +91,12 @@ export default function TournamentScreen() {
     return (
       <div className="space-y-6 pb-20">
         <h1 className="text-3xl font-bold">Tournament</h1>
-        <p className="text-red-400">{error}</p>
+        <div className="bg-gray-900 border border-red-800 rounded-xl p-6 text-center space-y-3">
+          <p className="text-red-400 text-sm">{error}</p>
+          <button onClick={() => fetchDetails()} className="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-500">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

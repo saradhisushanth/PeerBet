@@ -13,8 +13,10 @@ export function getSocket(): TypedSocket {
     socket = io(window.location.origin, {
       autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      timeout: 20000,
       auth: { token },
     });
   }

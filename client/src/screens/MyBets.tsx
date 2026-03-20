@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { INSURANCE_REFUND_PERCENT } from "@shared/constants";
 import { useBetStore, type Bet } from "../store/betStore";
 import { api } from "../services/api";
@@ -6,17 +6,46 @@ import { formatCurrency } from "../utils/format";
 
 type Filter = "ALL" | "PENDING" | "WON" | "LOST";
 
-export default function MyBets() {
-  const { bets, setBets, loading, setLoading } = useBetStore();
-  const [filter, setFilter] = useState<Filter>("ALL");
+const MAX_AUTO_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
 
-  useEffect(() => {
+export default function MyBets() {
+  const { bets, setBets } = useBetStore();
+  const [filter, setFilter] = useState<Filter>("ALL");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const retryCountRef = useRef(0);
+
+  const fetchBets = useCallback((autoRetry = false) => {
+    let cancelled = false;
     setLoading(true);
+    setError(null);
     api.bets
       .getMy()
-      .then((data) => setBets(data as Bet[]))
-      .finally(() => setLoading(false));
-  }, [setBets, setLoading]);
+      .then((data) => {
+        if (cancelled) return;
+        setBets(data as Bet[]);
+        retryCountRef.current = 0;
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (autoRetry && retryCountRef.current < MAX_AUTO_RETRIES) {
+          retryCountRef.current++;
+          setTimeout(() => { if (!cancelled) fetchBets(true); }, RETRY_DELAY_MS);
+        } else {
+          setError(e instanceof Error ? e.message : "Failed to load bets");
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [setBets]);
+
+  useEffect(() => {
+    retryCountRef.current = 0;
+    const cleanup = fetchBets(true);
+    return cleanup;
+  }, [fetchBets]);
 
   const filtered =
     filter === "ALL" ? bets : bets.filter((b) => b.status === filter);
@@ -53,6 +82,13 @@ export default function MyBets() {
 
       {loading ? (
         <p className="text-gray-500 text-sm">Loading bets...</p>
+      ) : error ? (
+        <div className="bg-gray-900 border border-red-800 rounded-xl p-6 text-center space-y-3">
+          <p className="text-red-400 text-sm">{error}</p>
+          <button onClick={() => fetchBets()} className="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-500">
+            Retry
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
           <p className="text-gray-500 text-sm">No bets found.</p>

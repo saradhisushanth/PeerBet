@@ -12,7 +12,7 @@ const OVERSCAN = 4;
 
 export default function Matches() {
   const { matches, setMatches, loading, setLoading } = useMatchStore();
-  const [filter, setFilter] = useState<StatusFilter>("ALL");
+  const [filter, setFilter] = useState<StatusFilter>("LIVE");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

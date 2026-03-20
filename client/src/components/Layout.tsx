@@ -14,6 +14,7 @@ export default function Layout() {
   const [insuranceRefundSnack, setInsuranceRefundSnack] = useState<number | null>(null);
   const [soloWinSnack, setSoloWinSnack] = useState<number | null>(null);
   const [soloByeSnack, setSoloByeSnack] = useState<number | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Refetch user (balance, etc.) when tab becomes visible so multi-tab and relogin stay in sync
   useEffect(() => {
@@ -62,6 +63,11 @@ export default function Layout() {
   useSocketEvent("betSettled", onBetSettled);
 
   function handleLogout() {
+    setShowLogoutConfirm(true);
+  }
+
+  function confirmLogout() {
+    setShowLogoutConfirm(false);
     logout();
     navigate("/login");
   }
@@ -92,6 +98,29 @@ export default function Layout() {
           <button type="button" onClick={() => setSoloByeSnack(null)} className="opacity-80 hover:opacity-100">×</button>
         </div>
       )}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 mx-4 max-w-xs w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white text-center">Logout?</h3>
+            <p className="text-sm text-gray-400 text-center mt-2">Are you sure you want to logout? You'll need to sign in again to place bets.</p>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors border border-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-500 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex-shrink-0 z-50 border-b border-gray-800 bg-gray-900/90 backdrop-blur-sm">
         <div className="max-w-lg mx-auto px-4 h-12 flex items-center justify-between">
           <span className="text-sm font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
@@ -99,9 +128,13 @@ export default function Layout() {
           </span>
           <div className="flex items-center gap-3">
             {user && (
-              <span className="text-sm text-primary-400 font-semibold truncate max-w-[100px]" title={user.username}>
+              <button
+                onClick={() => navigate("/stats")}
+                className="text-sm text-primary-400 font-semibold truncate max-w-[100px] hover:text-primary-300 transition-colors"
+                title={`${user.username} — View profile`}
+              >
                 {user.username}
-              </span>
+              </button>
             )}
             <span className="text-xs text-gray-400">·</span>
             <span className="text-xs text-gray-400">Balance:</span>
@@ -110,9 +143,15 @@ export default function Layout() {
             </span>
             <button
               onClick={handleLogout}
-              className="text-xs text-gray-500 hover:text-red-400"
+              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              title="Logout"
+              aria-label="Logout"
             >
-              Logout
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
             </button>
           </div>
         </div>
