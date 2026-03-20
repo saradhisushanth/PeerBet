@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { useMatchStore, type Match, type MatchSummary as MatchSummaryType } from "../store/matchStore";
 import { useAuthStore } from "../store/authStore";
 import { useBetStore, type Bet } from "../store/betStore";
-import { useSocket, useSocketEvent } from "../hooks/useSocket";
+import { useSocketEvent } from "../hooks/useSocket";
+import { joinMatchRoom, leaveMatchRoom } from "../services/socket";
 import { api } from "../services/api";
 import {
   ADMIN_USERNAME,
@@ -126,8 +127,6 @@ export default function MatchDetail() {
     undecided: { userId: string; username: string }[];
   } | null>(null);
 
-  const socket = useSocket();
-
   const fetchSummary = useCallback(() => {
     if (id) return api.matches.getSummary(id).then(setSummary);
     return Promise.resolve();
@@ -172,11 +171,11 @@ export default function MatchDetail() {
       setMatchDetailCache(id, { match: matchData, summary: summaryDataTyped as MatchSummaryType, board: boardData });
     });
     api.auth.me().then((me) => updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches }));
-    socket.emit("joinMatch", id);
+    joinMatchRoom(id);
     return () => {
-      socket.emit("leaveMatch", id!);
+      leaveMatchRoom(id!);
     };
-  }, [id, setSelectedMatch, setMatchDetailCache, getMatchDetailCache, socket, updateUser]);
+  }, [id, setSelectedMatch, setMatchDetailCache, getMatchDetailCache, updateUser]);
 
   // Countdown to when betting closes (toss time, or 30 min before match if no explicit toss)
   useEffect(() => {

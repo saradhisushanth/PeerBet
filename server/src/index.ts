@@ -43,6 +43,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
     origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
   },
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 io.use((socket, next) => {
@@ -72,8 +74,8 @@ io.on("connection", (socket) => {
     socket.leave(`match:${matchId}`);
   });
 
-  socket.on("disconnect", () => {
-    console.log(`Client disconnected: ${socket.id}`);
+  socket.on("disconnect", (reason) => {
+    console.log(`Client disconnected: ${socket.id} (reason: ${reason})`);
   });
 });
 

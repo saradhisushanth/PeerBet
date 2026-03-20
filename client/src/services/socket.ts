@@ -6,6 +6,8 @@ type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socket: TypedSocket | null = null;
 
+const activeRooms = new Set<string>();
+
 export function getSocket(): TypedSocket {
   const token = useAuthStore.getState().token;
 
@@ -18,6 +20,12 @@ export function getSocket(): TypedSocket {
       reconnectionDelayMax: 10000,
       timeout: 20000,
       auth: { token },
+    });
+
+    socket.on("connect", () => {
+      for (const room of activeRooms) {
+        socket!.emit("joinMatch", room);
+      }
     });
   }
   return socket;
@@ -34,5 +42,18 @@ export function disconnectSocket() {
   if (socket) {
     socket.disconnect();
     socket = null;
+    activeRooms.clear();
   }
+}
+
+export function joinMatchRoom(matchId: string) {
+  activeRooms.add(matchId);
+  const s = getSocket();
+  if (s.connected) s.emit("joinMatch", matchId);
+}
+
+export function leaveMatchRoom(matchId: string) {
+  activeRooms.delete(matchId);
+  const s = getSocket();
+  if (s.connected) s.emit("leaveMatch", matchId);
 }
