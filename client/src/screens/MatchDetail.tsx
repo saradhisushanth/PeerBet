@@ -129,14 +129,27 @@ export default function MatchDetail() {
     undecided: { userId: string; username: string }[];
   } | null>(null);
 
+  /** Drop stale summary/board HTTP responses so an older payload cannot lower totalPool and clamp another user's stake. */
+  const matchDetailLoadGenRef = useRef(0);
+  const summaryFetchSeqRef = useRef(0);
+  const boardFetchSeqRef = useRef(0);
+
   const fetchSummary = useCallback(() => {
-    if (id) return api.matches.getSummary(id).then(setSummary);
-    return Promise.resolve();
+    if (!id) return Promise.resolve();
+    const mySeq = ++summaryFetchSeqRef.current;
+    return api.matches.getSummary(id).then((data) => {
+      if (mySeq !== summaryFetchSeqRef.current) return;
+      setSummary(data as MatchSummary);
+    });
   }, [id]);
 
   const fetchBoard = useCallback(() => {
-    if (id) return api.matches.getBoard(id).then(setBoard);
-    return Promise.resolve();
+    if (!id) return Promise.resolve();
+    const mySeq = ++boardFetchSeqRef.current;
+    return api.matches.getBoard(id).then((data) => {
+      if (mySeq !== boardFetchSeqRef.current) return;
+      setBoard(data);
+    });
   }, [id]);
 
   const debouncedRefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,6 +166,12 @@ export default function MatchDetail() {
 
   useEffect(() => {
     if (!id) return;
+    const loadGen = ++matchDetailLoadGenRef.current;
+    summaryFetchSeqRef.current += 1;
+    boardFetchSeqRef.current += 1;
+    const sumSnap = summaryFetchSeqRef.current;
+    const brdSnap = boardFetchSeqRef.current;
+
     const cached = getMatchDetailCache(id);
     if (cached) {
       setSelectedMatch(cached.match);
@@ -165,12 +184,34 @@ export default function MatchDetail() {
       api.matches.getSummary(id),
       api.matches.getBoard(id),
     ]).then(([match, summaryData, boardData]) => {
+      if (loadGen !== matchDetailLoadGenRef.current) return;
       const matchData = match as Match;
       const summaryDataTyped = summaryData as MatchSummary;
       setSelectedMatch(matchData);
-      setSummary(summaryDataTyped);
-      setBoard(boardData);
-      setMatchDetailCache(id, { match: matchData, summary: summaryDataTyped as MatchSummaryType, board: boardData });
+      const appliedSum = summaryFetchSeqRef.current === sumSnap;
+      const appliedBrd = boardFetchSeqRef.current === brdSnap;
+      // #region agent log
+      if (!appliedSum || !appliedBrd) {
+        fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+          body: JSON.stringify({
+            sessionId: "016d92",
+            hypothesisId: "E",
+            runId: "post-fix",
+            location: "MatchDetail.tsx:initialLoad",
+            message: "discarded stale Promise.all summary/board (newer refetch won)",
+            data: { appliedSum, appliedBrd, sumSnap, sumCur: summaryFetchSeqRef.current, brdSnap, brdCur: boardFetchSeqRef.current },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+      if (appliedSum) setSummary(summaryDataTyped);
+      if (appliedBrd) setBoard(boardData);
+      if (appliedSum && appliedBrd) {
+        setMatchDetailCache(id, { match: matchData, summary: summaryDataTyped as MatchSummaryType, board: boardData });
+      }
     });
     api.auth.me().then((me) => updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches }));
     joinMatchRoom(id);
@@ -232,29 +273,74 @@ export default function MatchDetail() {
   // Skip overwriting if we just placed a stake and board hasn't caught up yet (prevents flicker)
   useEffect(() => {
     if (!board || !user || placing || stakeInputFocusedRef.current) return;
-    const amount =
+    const rawAmount =
       board.onHome.find((p) => p.userId === user.id)?.amount ??
       board.onAway.find((p) => p.userId === user.id)?.amount;
+    /** Prefer undecided list so a stale board cannot treat us as "on a team" and overwrite draft stake. */
+    const inUndecided = board.undecided.some((p) => p.userId === user.id);
+    const amount = inUndecided ? undefined : rawAmount;
     const justPlaced = lastPlacedStakeRef.current;
     if (justPlaced !== null) {
-      if (amount === justPlaced) {
-        lastBoardAmountRef.current = amount;
+      if (rawAmount === justPlaced && !inUndecided) {
+        lastBoardAmountRef.current = rawAmount;
         lastPlacedStakeRef.current = null;
         if (lastPlacedStakeTimeoutRef.current) {
           clearTimeout(lastPlacedStakeTimeoutRef.current);
           lastPlacedStakeTimeoutRef.current = null;
         }
       }
+      // #region agent log
+      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+        body: JSON.stringify({
+          sessionId: "016d92",
+          hypothesisId: "A",
+          location: "MatchDetail.tsx:boardSync",
+          message: "board sync skipped (justPlaced guard)",
+          data: { uid: user.id.slice(0, 8), amountFromBoard: rawAmount ?? null, inUndecided, justPlaced },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return;
     }
     if (amount != null && amount !== lastBoardAmountRef.current) {
+      // #region agent log
+      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+        body: JSON.stringify({
+          sessionId: "016d92",
+          hypothesisId: "A",
+          location: "MatchDetail.tsx:boardSync",
+          message: "board sync SET_STAKE from server bet amount",
+          data: { uid: user.id.slice(0, 8), amount, prevLastBoard: lastBoardAmountRef.current },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       lastBoardAmountRef.current = amount;
       setStake(amount);
       setStakeInputValue(String(amount));
     } else if (amount == null) {
+      // #region agent log
+      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+        body: JSON.stringify({
+          sessionId: "016d92",
+          hypothesisId: "D",
+          location: "MatchDetail.tsx:boardSync",
+          message: "board sync no my bet on board (amount null)",
+          data: { uid: user.id.slice(0, 8), prevLastBoard: lastBoardAmountRef.current },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       lastBoardAmountRef.current = null;
     }
-  }, [board?.onHome, board?.onAway, user?.id, placing]);
+  }, [board?.onHome, board?.onAway, board?.undecided, user?.id, placing]);
 
   useEffect(() => {
     return () => {
@@ -287,17 +373,89 @@ export default function MatchDetail() {
   const totalPoolForEffect = summary?.totalPool ?? 0;
   const myBetForEffect =
     board && user
-      ? board.onHome.find((p) => p.userId === user.id)?.amount ?? board.onAway.find((p) => p.userId === user.id)?.amount ?? 0
+      ? board.undecided.some((p) => p.userId === user.id)
+        ? 0
+        : board.onHome.find((p) => p.userId === user.id)?.amount ?? board.onAway.find((p) => p.userId === user.id)?.amount ?? 0
       : 0;
   const presentPoolForEffect = totalPoolForEffect - myBetForEffect;
   const poolCapForEffect = presentPoolForEffect > 0 ? Math.floor(presentPoolForEffect) : MAX_STAKE;
   const maxFromPoolForEffect = Math.max(MIN_STAKE, Math.min(poolCapForEffect, MAX_STAKE));
   const availableForEffect = (user?.balance ?? 0) + myBetForEffect;
   const maxStakeForEffect = Math.min(maxFromPoolForEffect, Math.max(0, availableForEffect - (insured ? INSURANCE_COST : 0)));
+  /** Max stake for undecided users: balance + hard caps only (not pool — avoids spurious clamp when others bet). */
+  const draftStakeMax = Math.floor(
+    Math.min(MAX_STAKE, Math.max(MIN_STAKE, Math.max(0, (user?.balance ?? 0) - (insured ? INSURANCE_COST : 0))))
+  );
   useEffect(() => {
-    if (lastPlacedStakeRef.current !== null) return;
-    setStake((s) => Math.floor(Math.min(Math.max(MIN_STAKE, s), maxStakeForEffect)));
-  }, [maxStakeForEffect]);
+    if (lastPlacedStakeRef.current !== null) {
+      // #region agent log
+      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+        body: JSON.stringify({
+          sessionId: "016d92",
+          hypothesisId: "C",
+          location: "MatchDetail.tsx:clamp",
+          message: "clamp skipped (stake protected)",
+          data: { maxStakeForEffect, protectedVal: lastPlacedStakeRef.current },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return;
+    }
+    if (myBetForEffect === 0) {
+      setStake((s) => {
+        const next = Math.floor(Math.min(Math.max(MIN_STAKE, s), draftStakeMax));
+        if (next !== s) {
+          // #region agent log
+          fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+            body: JSON.stringify({
+              sessionId: "016d92",
+              hypothesisId: "F",
+              location: "MatchDetail.tsx:clamp",
+              message: "draft clamp CHANGED stake (balance cap only)",
+              data: { prevStake: s, next, draftStakeMax, balance: user?.balance ?? null, insured },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+        }
+        return next;
+      });
+      return;
+    }
+    setStake((s) => {
+      const next = Math.floor(Math.min(Math.max(MIN_STAKE, s), maxStakeForEffect));
+      if (next !== s) {
+        // #region agent log
+        fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+          body: JSON.stringify({
+            sessionId: "016d92",
+            hypothesisId: "B",
+            location: "MatchDetail.tsx:clamp",
+            message: "clamp CHANGED stake",
+            data: {
+              prevStake: s,
+              next,
+              maxStakeForEffect,
+              totalPoolForEffect,
+              myBetForEffect,
+              balance: user?.balance ?? null,
+              insured,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+      }
+      return next;
+    });
+  }, [maxStakeForEffect, myBetForEffect, user?.balance, insured, draftStakeMax]);
 
   const handleMatchUpdate = useCallback(() => {
     if (id) {
@@ -314,6 +472,20 @@ export default function MatchDetail() {
     }
   });
   useSocketEvent("betPlaced", () => {
+    // #region agent log
+    fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
+      body: JSON.stringify({
+        sessionId: "016d92",
+        hypothesisId: "C",
+        location: "MatchDetail.tsx:betPlaced",
+        message: "socket betPlaced -> debouncedRefetch",
+        data: { matchId: id ?? null, uid: user?.id?.slice(0, 8) ?? null, stakeProtected: lastPlacedStakeRef.current },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     debouncedRefetch();
   });
 
@@ -565,6 +737,9 @@ export default function MatchDetail() {
         : away?.shortName
       : null;
 
+  /** Solo rules UI only for the single bettor — not for undecided viewers on the same match. */
+  const isSoleBettor = participantCount === 1 && !!userBetTeamId;
+
   return (
     <div className={bettingOpen ? "pb-80" : "pb-32"}>
       {/* TOP BAR: Match | Timer | Pool | Notifications */}
@@ -594,15 +769,17 @@ export default function MatchDetail() {
               {participantCount === 2
                 ? "With only 2 players, the one with the lower leaderboard rank will be moved."
                 : participantCount === 1
-                  ? "Only one player has bet — solo participant rules apply (see below)."
+                  ? isSoleBettor
+                    ? "Only one player has bet — solo participant rules apply (see below)."
+                    : "One player has bet so far — you can still join before the lock."
                   : "Get your pick in before the countdown hits zero."}
             </p>
           </div>
         </div>
       )}
 
-      {/* Solo participant: one player only — win bonus + bye refund */}
-      {bettingOpen && participantCount === 1 && (
+      {/* Solo participant: one player only — win bonus + bye refund (bettor only) */}
+      {bettingOpen && isSoleBettor && (
         <div className="px-3 pt-2">
           <div className="rounded-xl border border-gray-600 bg-gray-800/50 p-3 max-w-xl">
             <p className="text-xs font-medium text-gray-400">
