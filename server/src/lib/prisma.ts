@@ -10,8 +10,7 @@ const projectRoot = path.resolve(__dirname, "../../..");
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
 let connectionString = process.env.DATABASE_URL!;
-// Supabase (and most cloud Postgres) require SSL; append if not already present
-if (connectionString.includes("supabase.co") && !connectionString.includes("sslmode=")) {
+if (connectionString.includes("supabase") && !connectionString.includes("sslmode=")) {
   connectionString += connectionString.includes("?") ? "&sslmode=require" : "?sslmode=require";
 }
 const adapter = new PrismaPg({ connectionString });
