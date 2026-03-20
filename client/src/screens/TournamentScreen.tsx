@@ -87,7 +87,8 @@ export default function TournamentScreen() {
     }
   }
 
-  if (loading) {
+  // Only block the whole screen on first load; when revalidating, keep showing cached details.
+  if (loading && !details) {
     return (
       <div className="space-y-6 pb-20">
         <h1 className="text-3xl font-bold">Tournament</h1>

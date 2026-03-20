@@ -13,7 +13,7 @@ export const betController = {
         return;
       }
 
-      const bet = await betService.place(userId, matchId, selectedTeamId, Number(amount), Boolean(insured));
+      const { bet, wallet } = await betService.place(userId, matchId, selectedTeamId, Number(amount), Boolean(insured));
 
       io.to(`match:${matchId}`).emit("betPlaced", {
         matchId,
@@ -23,7 +23,7 @@ export const betController = {
         insured: Boolean(insured),
       });
 
-      res.status(201).json({ success: true, data: bet });
+      res.status(201).json({ success: true, data: bet, wallet });
     } catch (err) {
       if (err instanceof BetError) {
         res.status(err.statusCode).json({ success: false, error: err.message });

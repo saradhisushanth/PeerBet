@@ -38,7 +38,10 @@ export const useBetStore = create<BetState>((set) => ({
   loading: false,
   error: null,
   setBets: (bets) => set({ bets, lastFetched: Date.now() }),
-  addBet: (bet) => set((state) => ({ bets: [bet, ...state.bets] })),
+  addBet: (bet) =>
+    set((state) => ({
+      bets: [bet, ...state.bets.filter((b) => b.matchId !== bet.matchId)],
+    })),
   updateBetStatus: (betId, status) =>
     set((state) => ({
       bets: state.bets.map((b) => (b.id === betId ? { ...b, status } : b)),

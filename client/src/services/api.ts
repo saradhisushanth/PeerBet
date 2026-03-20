@@ -2,44 +2,100 @@ import { useAuthStore } from "../store/authStore";
 
 const BASE_URL = "/api";
 
-const REQUEST_TIMEOUT_MS = 15000;
+/** Default for reads / light requests */
+const DEFAULT_TIMEOUT_MS = 28000;
+/** Bet mutations can be slower (DB, cold serverless, TLS handshake) */
+const BET_MUTATION_TIMEOUT_MS = 70000;
+/** Retries after timeout / flaky network / gateway errors (place is idempotent enough: same bet reconciles server-side) */
+const BET_MUTATION_RETRIES = 2;
+const RETRY_BACKOFF_MS = [900, 2200];
 
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = useAuthStore.getState().token;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+export type RequestConfig = {
+  timeoutMs?: number;
+  /** Extra attempts after the first failure (only for retryable errors). */
+  retries?: number;
+};
 
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}${endpoint}`, {
-      headers,
-      signal: controller.signal,
-      ...options,
-    });
-  } catch (err) {
+/** Wallet fields returned with POST /bets/place (avoids a follow-up GET /auth/me). */
+export type PlaceBetWalletSnapshot = {
+  balance: number;
+  prizePoolContribution: number;
+  consecutiveMissedMatches: number;
+};
+
+/** Raw JSON body for successful HTTP responses (retries, auth, errors). */
+async function requestJson(
+  endpoint: string,
+  options?: RequestInit,
+  config?: RequestConfig
+): Promise<Record<string, unknown>> {
+  const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const retries = config?.retries ?? 0;
+  const maxAttempts = retries + 1;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const canRetry = attempt < maxAttempts - 1;
+    const token = useAuthStore.getState().token;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}${endpoint}`, {
+        headers,
+        signal: controller.signal,
+        ...options,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      const failedFetch = err instanceof TypeError;
+      if ((aborted || failedFetch) && canRetry) {
+        await sleep(RETRY_BACKOFF_MS[Math.min(attempt, RETRY_BACKOFF_MS.length - 1)]!);
+        continue;
+      }
+      if (aborted) {
+        throw new Error("Request timed out. Server may be waking up — try again.");
+      }
+      throw new Error("Network error. Check your connection.");
+    }
     clearTimeout(timer);
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Request timed out. Server may be waking up — try again.");
-    }
-    throw new Error("Network error. Check your connection.");
-  }
-  clearTimeout(timer);
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      useAuthStore.getState().logout();
+    if (!res.ok) {
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+      }
+      if ([502, 503, 504].includes(res.status) && canRetry) {
+        await res.text().catch(() => {});
+        await sleep(RETRY_BACKOFF_MS[Math.min(attempt, RETRY_BACKOFF_MS.length - 1)]!);
+        continue;
+      }
+      const error = await res.json().catch(() => ({ error: "Request failed" }));
+      throw new Error((error as { error?: string }).error || `HTTP ${res.status}`);
     }
-    const error = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || `HTTP ${res.status}`);
+
+    return (await res.json()) as Record<string, unknown>;
   }
 
-  const json = await res.json();
-  return json.data;
+  throw new Error("Request timed out. Server may be waking up — try again.");
+}
+
+async function request<T>(
+  endpoint: string,
+  options?: RequestInit,
+  config?: RequestConfig
+): Promise<T> {
+  const json = await requestJson(endpoint, options, config);
+  return json.data as T;
 }
 
 export interface AuthResponse {
@@ -115,16 +171,40 @@ export const api = {
       }),
   },
   bets: {
-    place: (matchId: string, selectedTeamId: string, amount: number, insured?: boolean) =>
-      request("/bets/place", {
-        method: "POST",
-        body: JSON.stringify({ matchId, selectedTeamId, amount, insured }),
-      }),
+    place: async (
+      matchId: string,
+      selectedTeamId: string,
+      amount: number,
+      insured?: boolean
+    ): Promise<{ bet: unknown; wallet: PlaceBetWalletSnapshot }> => {
+      const json = await requestJson(
+        "/bets/place",
+        {
+          method: "POST",
+          body: JSON.stringify({ matchId, selectedTeamId, amount, insured }),
+        },
+        { timeoutMs: BET_MUTATION_TIMEOUT_MS, retries: BET_MUTATION_RETRIES }
+      );
+      const wallet = json.wallet as PlaceBetWalletSnapshot | undefined;
+      if (
+        !wallet ||
+        typeof wallet.balance !== "number" ||
+        typeof wallet.prizePoolContribution !== "number" ||
+        typeof wallet.consecutiveMissedMatches !== "number"
+      ) {
+        throw new Error("Invalid place response from server");
+      }
+      return { bet: json.data, wallet };
+    },
     cancel: (matchId: string) =>
-      request("/bets/cancel", {
-        method: "POST",
-        body: JSON.stringify({ matchId }),
-      }),
+      request(
+        "/bets/cancel",
+        {
+          method: "POST",
+          body: JSON.stringify({ matchId }),
+        },
+        { timeoutMs: BET_MUTATION_TIMEOUT_MS, retries: BET_MUTATION_RETRIES }
+      ),
     getMy: () => request("/bets/my"),
   },
   leaderboard: {

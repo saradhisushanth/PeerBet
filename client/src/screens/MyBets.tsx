@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { INSURANCE_REFUND_PERCENT } from "@shared/constants";
 import { useBetStore, type Bet } from "../store/betStore";
@@ -56,7 +56,23 @@ export default function MyBets() {
     return cleanup;
   }, [fetchBets, lastFetched, bets.length]);
 
-  const filtered = bets.filter((b) => {
+  /** One entry per match — latest bet by createdAt (server also dedupes; this covers stale client merges). */
+  const betsOnePerMatch = useMemo(() => {
+    const sorted = [...bets].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    const seen = new Set<string>();
+    const out: Bet[] = [];
+    for (const b of sorted) {
+      if (!seen.has(b.matchId)) {
+        seen.add(b.matchId);
+        out.push(b);
+      }
+    }
+    return out;
+  }, [bets]);
+
+  const filtered = betsOnePerMatch.filter((b) => {
     if (filter !== "ALL" && b.status !== filter) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();

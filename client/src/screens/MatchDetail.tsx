@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useMatchStore, type Match, type MatchSummary as MatchSummaryType } from "../store/matchStore";
 import { useAuthStore } from "../store/authStore";
@@ -17,6 +17,7 @@ import {
 import PlayerBettingBoard from "../components/PlayerBettingBoard";
 import ProfitBreakdown from "../components/ProfitBreakdown";
 import { formatCurrency, formatNumber } from "../utils/format";
+import type { BetPlacedPayload, MatchUpdatePayload } from "@shared/types";
 
 const STAKE_STEP = 10;
 
@@ -87,6 +88,7 @@ export default function MatchDetail() {
   const [stakeAnimating, setStakeAnimating] = useState(false);
   const [stakeCollapsed, setStakeCollapsed] = useState(false);
   const stakeInputFocusedRef = useRef(false);
+  const stakeInputRef = useRef<HTMLInputElement>(null);
   const lastBoardAmountRef = useRef<number | null>(null);
   const lastPlacedStakeRef = useRef<number | null>(null);
   const lastPlacedStakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,6 +130,25 @@ export default function MatchDetail() {
     onAway: { userId: string; username: string; amount: number; insured?: boolean }[];
     undecided: { userId: string; username: string }[];
   } | null>(null);
+
+  /** On-board bet = single source of truth for stake when user has already placed (not undecided-only draft). */
+  const myBetAmount = useMemo(() => {
+    if (!board || !user) return 0;
+    return (
+      board.onHome.find((p) => p.userId === user.id)?.amount ??
+      board.onAway.find((p) => p.userId === user.id)?.amount ??
+      0
+    );
+  }, [board, user?.id]);
+
+  const myBetInsured = useMemo(() => {
+    if (!board || !user) return false;
+    return (
+      board.onHome.find((p) => p.userId === user.id)?.insured ??
+      board.onAway.find((p) => p.userId === user.id)?.insured ??
+      false
+    );
+  }, [board, user?.id]);
 
   /** Drop stale summary/board HTTP responses so an older payload cannot lower totalPool and clamp another user's stake. */
   const matchDetailLoadGenRef = useRef(0);
@@ -190,23 +211,6 @@ export default function MatchDetail() {
       setSelectedMatch(matchData);
       const appliedSum = summaryFetchSeqRef.current === sumSnap;
       const appliedBrd = boardFetchSeqRef.current === brdSnap;
-      // #region agent log
-      if (!appliedSum || !appliedBrd) {
-        fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-          body: JSON.stringify({
-            sessionId: "016d92",
-            hypothesisId: "E",
-            runId: "post-fix",
-            location: "MatchDetail.tsx:initialLoad",
-            message: "discarded stale Promise.all summary/board (newer refetch won)",
-            data: { appliedSum, appliedBrd, sumSnap, sumCur: summaryFetchSeqRef.current, brdSnap, brdCur: boardFetchSeqRef.current },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
       if (appliedSum) setSummary(summaryDataTyped);
       if (appliedBrd) setBoard(boardData);
       if (appliedSum && appliedBrd) {
@@ -289,58 +293,22 @@ export default function MatchDetail() {
           lastPlacedStakeTimeoutRef.current = null;
         }
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-        body: JSON.stringify({
-          sessionId: "016d92",
-          hypothesisId: "A",
-          location: "MatchDetail.tsx:boardSync",
-          message: "board sync skipped (justPlaced guard)",
-          data: { uid: user.id.slice(0, 8), amountFromBoard: rawAmount ?? null, inUndecided, justPlaced },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       return;
     }
     if (amount != null && amount !== lastBoardAmountRef.current) {
-      // #region agent log
-      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-        body: JSON.stringify({
-          sessionId: "016d92",
-          hypothesisId: "A",
-          location: "MatchDetail.tsx:boardSync",
-          message: "board sync SET_STAKE from server bet amount",
-          data: { uid: user.id.slice(0, 8), amount, prevLastBoard: lastBoardAmountRef.current },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       lastBoardAmountRef.current = amount;
-      setStake(amount);
-      setStakeInputValue(String(amount));
+      // While editing stake unlocked, don't push server amount into local draft (commit on Lock only).
+      if (!(myBetAmount > 0 && !stakeLocked)) {
+        setStake(amount);
+        setStakeInputValue(String(amount));
+      }
     } else if (amount == null) {
-      // #region agent log
-      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-        body: JSON.stringify({
-          sessionId: "016d92",
-          hypothesisId: "D",
-          location: "MatchDetail.tsx:boardSync",
-          message: "board sync no my bet on board (amount null)",
-          data: { uid: user.id.slice(0, 8), prevLastBoard: lastBoardAmountRef.current },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      lastBoardAmountRef.current = null;
+      // Board can briefly omit the chip during refetch; don't wipe ref while stake is locked (source for unlock).
+      if (!(stakeLocked && stake >= MIN_STAKE)) {
+        lastBoardAmountRef.current = null;
+      }
     }
-  }, [board?.onHome, board?.onAway, board?.undecided, user?.id, placing]);
+  }, [board?.onHome, board?.onAway, board?.undecided, user?.id, placing, myBetAmount, stakeLocked, stake]);
 
   useEffect(() => {
     return () => {
@@ -349,12 +317,23 @@ export default function MatchDetail() {
     };
   }, []);
 
-  // When stake is updated from outside the input (e.g. +/- or clamp), keep input display in sync
-  // Skip while user's value is protected (prevents flicker from overwriting with stale stake)
+  // Sync input display: locked + has bet → show server amount; else show local draft (`stake`).
   useEffect(() => {
     if (lastPlacedStakeRef.current !== null || stakeInputFocusedRef.current) return;
-    setStakeInputValue(String(stake));
-  }, [stake]);
+    const hasBet = myBetAmount > 0;
+    // While locked, prefer board amount but fall back to stake if board is briefly stale (0).
+    const serverStake = hasBet ? myBetAmount : lastBoardAmountRef.current ?? 0;
+    const truth =
+      stakeLocked && (serverStake > 0 || stake >= MIN_STAKE)
+        ? serverStake > 0
+          ? serverStake
+          : stake
+        : stake;
+    setStakeInputValue(String(truth));
+    if (stakeLocked && hasBet && stake !== myBetAmount) {
+      setStake(myBetAmount);
+    }
+  }, [stake, myBetAmount, stakeLocked]);
 
   // Trigger brief transition when stake value changes (masks flicker from sync/async)
   const isInitialStakeRef = useRef(true);
@@ -368,94 +347,11 @@ export default function MatchDetail() {
     return () => clearTimeout(t);
   }, [stake]);
 
-  // When pool, balance, or cap changes, clamp stake to valid range
-  // Present pool = pool excluding our bet (rule based on current state)
-  const totalPoolForEffect = summary?.totalPool ?? 0;
-  const myBetForEffect =
-    board && user
-      ? board.undecided.some((p) => p.userId === user.id)
-        ? 0
-        : board.onHome.find((p) => p.userId === user.id)?.amount ?? board.onAway.find((p) => p.userId === user.id)?.amount ?? 0
-      : 0;
-  const presentPoolForEffect = totalPoolForEffect - myBetForEffect;
-  const poolCapForEffect = presentPoolForEffect > 0 ? Math.floor(presentPoolForEffect) : MAX_STAKE;
-  const maxFromPoolForEffect = Math.max(MIN_STAKE, Math.min(poolCapForEffect, MAX_STAKE));
-  const availableForEffect = (user?.balance ?? 0) + myBetForEffect;
-  const maxStakeForEffect = Math.min(maxFromPoolForEffect, Math.max(0, availableForEffect - (insured ? INSURANCE_COST : 0)));
-  /** Max stake for undecided users: balance + hard caps only (not pool — avoids spurious clamp when others bet). */
-  const draftStakeMax = Math.floor(
-    Math.min(MAX_STAKE, Math.max(MIN_STAKE, Math.max(0, (user?.balance ?? 0) - (insured ? INSURANCE_COST : 0))))
-  );
-  useEffect(() => {
-    if (lastPlacedStakeRef.current !== null) {
-      // #region agent log
-      fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-        body: JSON.stringify({
-          sessionId: "016d92",
-          hypothesisId: "C",
-          location: "MatchDetail.tsx:clamp",
-          message: "clamp skipped (stake protected)",
-          data: { maxStakeForEffect, protectedVal: lastPlacedStakeRef.current },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      return;
-    }
-    if (myBetForEffect === 0) {
-      setStake((s) => {
-        const next = Math.floor(Math.min(Math.max(MIN_STAKE, s), draftStakeMax));
-        if (next !== s) {
-          // #region agent log
-          fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-            body: JSON.stringify({
-              sessionId: "016d92",
-              hypothesisId: "F",
-              location: "MatchDetail.tsx:clamp",
-              message: "draft clamp CHANGED stake (balance cap only)",
-              data: { prevStake: s, next, draftStakeMax, balance: user?.balance ?? null, insured },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
-        }
-        return next;
-      });
-      return;
-    }
-    setStake((s) => {
-      const next = Math.floor(Math.min(Math.max(MIN_STAKE, s), maxStakeForEffect));
-      if (next !== s) {
-        // #region agent log
-        fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-          body: JSON.stringify({
-            sessionId: "016d92",
-            hypothesisId: "B",
-            location: "MatchDetail.tsx:clamp",
-            message: "clamp CHANGED stake",
-            data: {
-              prevStake: s,
-              next,
-              maxStakeForEffect,
-              totalPoolForEffect,
-              myBetForEffect,
-              balance: user?.balance ?? null,
-              insured,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-      }
-      return next;
-    });
-  }, [maxStakeForEffect, myBetForEffect, user?.balance, insured, draftStakeMax]);
+  /**
+   * Do not auto-clamp `stake` when pool/summary changes (e.g. another player bets).
+   * Stake is local draft state; max is enforced on +/-, blur, and place. Board sync only
+   * updates stake when *this user's* confirmed on-board amount changes.
+   */
 
   const handleMatchUpdate = useCallback(() => {
     if (id) {
@@ -464,28 +360,20 @@ export default function MatchDetail() {
     }
   }, [id, setSelectedMatch, fetchSummary]);
 
-  useSocketEvent("matchUpdate", () => {
-    if (id) {
-      api.matches.getById(id).then((data) => setSelectedMatch(data as Match));
-      debouncedRefetch();
-      api.auth.me().then((me) => updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches }));
-    }
+  useSocketEvent("matchUpdate", (data: MatchUpdatePayload) => {
+    if (!id || data.matchId !== id) return;
+    api.matches.getById(id).then((match) => setSelectedMatch(match as Match));
+    debouncedRefetch();
+    api.auth.me().then((me) =>
+      updateUser({
+        balance: me.balance,
+        prizePoolContribution: me.prizePoolContribution,
+        consecutiveMissedMatches: me.consecutiveMissedMatches,
+      })
+    );
   });
-  useSocketEvent("betPlaced", () => {
-    // #region agent log
-    fetch("http://127.0.0.1:7657/ingest/913ab55f-ce50-4cab-86f5-1e1d6e71afca", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "016d92" },
-      body: JSON.stringify({
-        sessionId: "016d92",
-        hypothesisId: "C",
-        location: "MatchDetail.tsx:betPlaced",
-        message: "socket betPlaced -> debouncedRefetch",
-        data: { matchId: id ?? null, uid: user?.id?.slice(0, 8) ?? null, stakeProtected: lastPlacedStakeRef.current },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+  useSocketEvent("betPlaced", (data: BetPlacedPayload) => {
+    if (!id || data.matchId !== id) return;
     debouncedRefetch();
   });
 
@@ -502,8 +390,8 @@ export default function MatchDetail() {
     debouncedRefetch();
   });
 
-  async function handlePlaceBetFromDrop(teamId: string, amount: number) {
-    if (!user || !id) return;
+  async function handlePlaceBetFromDrop(teamId: string, amount: number): Promise<boolean> {
+    if (!user || !id) return false;
     setError(null);
     setSuccess(null);
 
@@ -513,7 +401,7 @@ export default function MatchDetail() {
     const totalRequired = amount + (insured ? INSURANCE_COST : 0);
     if (totalRequired > balanceBeforeThisMatch) {
       setError(`You cannot stake more than your balance when you entered this match. Balance: ${formatCurrency(balanceBeforeThisMatch)}.`);
-      return;
+      return false;
     }
 
     const pool = summary?.totalPool ?? 0;
@@ -529,15 +417,15 @@ export default function MatchDetail() {
 
     if (amount < MIN_STAKE) {
       setError(`Minimum stake is ${formatCurrency(MIN_STAKE)}`);
-      return;
+      return false;
     }
     if (amount > MAX_STAKE) {
       setError(`Maximum stake is ${formatCurrency(MAX_STAKE)}`);
-      return;
+      return false;
     }
     if (amount > effectiveMaxStake) {
       setError(`Stake too high. Max is ${formatCurrency(effectiveMaxStake)} (pool / balance cap).`);
-      return;
+      return false;
     }
 
     // Optimistic update: move chip immediately in local state
@@ -556,17 +444,24 @@ export default function MatchDetail() {
 
     setPlacing(true);
     try {
-      const bet = await api.bets.place(id, teamId, amount, insured);
+      const { bet, wallet } = await api.bets.place(id, teamId, amount, insured);
       addBet(bet as Bet);
       const teamName = selectedMatch?.homeTeam.id === teamId ? selectedMatch.homeTeam.shortName : selectedMatch?.awayTeam.shortName;
       setSuccess(`Bet ${formatCurrency(amount)} on ${teamName}`);
       setStakeProtected(amount, 2000);
-      const me = await api.auth.me();
-      updateUser({ balance: me.balance, prizePoolContribution: me.prizePoolContribution, consecutiveMissedMatches: me.consecutiveMissedMatches });
-      debouncedRefetch();
+      setStakeLocked(true);
+      updateUser({
+        balance: wallet.balance,
+        prizePoolContribution: wallet.prizePoolContribution,
+        consecutiveMissedMatches: wallet.consecutiveMissedMatches,
+      });
+      // Refresh board + summary in parallel immediately (no debounce) so drag-drop feels snappy.
+      void Promise.all([fetchBoard(), fetchSummary()]).catch(() => {});
+      return true;
     } catch (err) {
       setBoard(prevBoard);
       setError(err instanceof Error ? err.message : "Failed to place bet");
+      return false;
     } finally {
       setPlacing(false);
     }
@@ -655,6 +550,7 @@ export default function MatchDetail() {
         const refund = cancelled.amount + (cancelled.insured ? INSURANCE_COST : 0);
         setBalance(user.balance + refund);
         setSuccess("Bet cancelled");
+        setStakeLocked(false);
       }
       debouncedRefetch();
     } catch (err) {
@@ -665,17 +561,6 @@ export default function MatchDetail() {
     }
   }
 
-  // Derived from board/user only — must be before early return so hook order is stable
-  const myBetAmount =
-    board && user
-      ? board.onHome.find((p) => p.userId === user.id)?.amount ??
-        board.onAway.find((p) => p.userId === user.id)?.amount ??
-        0
-      : 0;
-  const myBetInsured =
-    board && user
-      ? board.onHome.find((p) => p.userId === user.id)?.insured ?? board.onAway.find((p) => p.userId === user.id)?.insured ?? false
-      : false;
   /** Balance before placing/editing any bet on this match (state when they entered the match). */
   const balanceAtMatchEntry =
     (user?.balance ?? 0) + myBetAmount + (myBetInsured ? INSURANCE_COST : 0);
@@ -714,6 +599,28 @@ export default function MatchDetail() {
   const availableBalance = (user?.balance ?? 0) + myBetAmount;
   const maxStakeFromBalance = Math.max(0, availableBalance - (insured ? INSURANCE_COST : 0));
   const maxStake = Math.min(maxStakeFromPool, maxStakeFromBalance);
+
+  function blurStakeInput() {
+    stakeInputFocusedRef.current = false;
+    stakeInputRef.current?.blur();
+  }
+
+  /** Clamp stake input to min/max and sync `stake` (same rules as input blur). */
+  function clampStakeInputToState(): number {
+    const n = Math.floor(Number(stakeInputValue));
+    if (!Number.isNaN(n) && n < MIN_STAKE) {
+      flashStakeWarning(`Minimum stake is ${formatCurrency(MIN_STAKE)}. Adjusted to minimum.`);
+    } else if (!Number.isNaN(n) && n > maxStake) {
+      flashStakeWarning(`Maximum stake is ${formatCurrency(maxStake)} (pool / balance cap). Adjusted to max.`);
+    }
+    const clamped = Number.isNaN(n) || n < MIN_STAKE ? MIN_STAKE : Math.min(n, maxStake);
+    const finalStake = Math.floor(clamped);
+    setStake(finalStake);
+    setStakeInputValue(String(finalStake));
+    setStakeProtected(finalStake);
+    return finalStake;
+  }
+
   const momentumHome = summary?.momentum?.homePercent ?? 50;
   const momentumAway = summary?.momentum?.awayPercent ?? 50;
   const recentBets = summary?.recentBets ?? [];
@@ -834,7 +741,9 @@ export default function MatchDetail() {
               board={board}
               currentUserId={user?.id ?? null}
               stake={stake}
-              onPlaceBet={handlePlaceBetFromDrop}
+              onPlaceBet={async (teamId, amount) => {
+                await handlePlaceBetFromDrop(teamId, amount);
+              }}
               onCancelBet={handleCancelBetFromDrop}
               placing={placing}
               isUpcoming={isUpcoming}
@@ -1052,13 +961,51 @@ export default function MatchDetail() {
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setStakeLocked((l) => !l)}
+                      disabled={placing}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={async () => {
+                        if (placing) return;
+                        if (stakeLocked) {
+                          setStakeLocked(false);
+                          // `myBetAmount` can be 0 during board refetch; prefer locked `stake`, then last good board ref.
+                          const committed =
+                            myBetAmount > 0
+                              ? myBetAmount
+                              : lastBoardAmountRef.current != null && lastBoardAmountRef.current > 0
+                                ? lastBoardAmountRef.current
+                                : stake;
+                          const v = Math.max(MIN_STAKE, Math.floor(Number(committed)));
+                          setStake(v);
+                          setStakeInputValue(String(v));
+                          return;
+                        }
+                        // Lock: blur field, commit typed value, then lock UI (optimistic before save).
+                        blurStakeInput();
+                        const finalAmt = clampStakeInputToState();
+                        if (userBetTeamId && bettingOpen && myBetAmount > 0) {
+                          if (finalAmt !== myBetAmount) {
+                            setStakeLocked(true);
+                            const ok = await handlePlaceBetFromDrop(userBetTeamId, finalAmt);
+                            if (!ok) setStakeLocked(false);
+                          } else {
+                            setStakeLocked(true);
+                          }
+                          return;
+                        }
+                        setStakeLocked(true);
+                      }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         stakeLocked
                           ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
                           : "bg-gray-700 text-gray-300 border border-gray-600 hover:bg-gray-600"
                       }`}
-                      title={stakeLocked ? "Stake is locked. Tap to unlock and adjust." : "Lock your stake to prevent accidental changes."}
+                      title={
+                        stakeLocked
+                          ? "Unlock to change stake; changes stay local until you lock again."
+                          : myBetAmount > 0
+                            ? "Save your stake to the server (one request)."
+                            : "Lock the counter to prevent accidental changes."
+                      }
                     >
                       {stakeLocked ? "🔒 Unlock" : "🔓 Lock Stake"}
                     </button>
@@ -1075,7 +1022,6 @@ export default function MatchDetail() {
                               setStake(MIN_STAKE);
                               setStakeInputValue(String(MIN_STAKE));
                               setStakeProtected(MIN_STAKE);
-                              if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, MIN_STAKE);
                             }
                             return;
                           }
@@ -1083,7 +1029,6 @@ export default function MatchDetail() {
                           setStake(newStake);
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
-                          if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, newStake);
                         }}
                         className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
                       >
@@ -1091,6 +1036,7 @@ export default function MatchDetail() {
                       </button>
                       <span className={stakeAnimating ? "stake-value-transition inline-block" : "inline-block"}>
                         <input
+                          ref={stakeInputRef}
                           type="number"
                           min={MIN_STAKE}
                           max={maxStake}
@@ -1100,18 +1046,7 @@ export default function MatchDetail() {
                           onFocus={() => { stakeInputFocusedRef.current = true; }}
                           onBlur={() => {
                             stakeInputFocusedRef.current = false;
-                            const n = Math.floor(Number(stakeInputValue));
-                            if (!Number.isNaN(n) && n < MIN_STAKE) {
-                              flashStakeWarning(`Minimum stake is ${formatCurrency(MIN_STAKE)}. Adjusted to minimum.`);
-                            } else if (!Number.isNaN(n) && n > maxStake) {
-                              flashStakeWarning(`Maximum stake is ${formatCurrency(maxStake)} (pool / balance cap). Adjusted to max.`);
-                            }
-                            const clamped = Number.isNaN(n) || n < MIN_STAKE ? MIN_STAKE : Math.min(n, maxStake);
-                            const finalStake = Math.floor(clamped);
-                            setStake(finalStake);
-                            setStakeInputValue(String(finalStake));
-                            setStakeProtected(finalStake);
-                            if (user && id && userBetTeamId && bettingOpen && !placing) handlePlaceBetFromDrop(userBetTeamId, finalStake);
+                            clampStakeInputToState();
                           }}
                           onChange={(e) => setStakeInputValue(toIntegerStake(e.target.value))}
                           className={`w-16 text-center font-bold border rounded-lg px-1 py-1.5 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
@@ -1132,7 +1067,6 @@ export default function MatchDetail() {
                               setStake(maxStake);
                               setStakeInputValue(String(maxStake));
                               setStakeProtected(maxStake);
-                              if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, maxStake);
                             }
                             return;
                           }
@@ -1140,7 +1074,6 @@ export default function MatchDetail() {
                           setStake(newStake);
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
-                          if (user && id && userBetTeamId && bettingOpen) handlePlaceBetFromDrop(userBetTeamId, newStake);
                         }}
                         className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
                       >
@@ -1148,6 +1081,11 @@ export default function MatchDetail() {
                       </button>
                     </div>
                   </div>
+                  {myBetAmount > 0 && !stakeLocked && (
+                    <p className="text-xs text-amber-400/90">
+                      Adjust stake locally, then tap <strong>Lock Stake</strong> once to save to the server.
+                    </p>
+                  )}
                   {participantCount >= 1 && (
                     <>
                       <p className="text-xs text-gray-500" title="Max is the lower of: current pool (excluding your bet) or your available balance">

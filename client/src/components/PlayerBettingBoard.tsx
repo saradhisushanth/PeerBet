@@ -214,7 +214,7 @@ export default function PlayerBettingBoard({
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 50, tolerance: 8 } })
   );
 
   const homePoolTotal = board.onHome.reduce((s, p) => s + p.amount, 0);

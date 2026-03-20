@@ -1,24 +1,33 @@
 import { prisma } from "../lib/prisma.js";
 import { PRIZE_DISTRIBUTION_PERCENT, HOUSE_CUT_PERCENT } from "../../../shared/constants.js";
 
-const INITIAL_BALANCE = 1000;
-
 export const tournamentService = {
   async getDetails() {
-    await prisma.user.updateMany({
-      where: { prizePoolContribution: 0 },
-      data: { prizePoolContribution: INITIAL_BALANCE },
-    });
-
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        balance: true,
-        prizePoolContribution: true,
-      },
-      orderBy: { username: "asc" },
-    });
+    // Run user list + recent transactions in parallel (independent reads).
+    // NOTE: Do not run updateMany/backfills here — that ran on every GET before and killed latency on remote DBs.
+    const [users, transactions] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          username: true,
+          balance: true,
+          prizePoolContribution: true,
+        },
+        orderBy: { username: "asc" },
+      }),
+      prisma.walletTransaction.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          userId: true,
+          amount: true,
+          approvedBy: true,
+          createdAt: true,
+          user: { select: { username: true } },
+        },
+      }),
+    ]);
 
     type UserRow = (typeof users)[number];
     const totalPrizePool = users.reduce((s: number, u: UserRow) => s + (u.prizePoolContribution ?? 0), 0);
@@ -29,14 +38,6 @@ export const tournamentService = {
       balance: u.balance ?? 0,
       prizePoolContribution: u.prizePoolContribution ?? 0,
     }));
-
-    const transactions = await prisma.walletTransaction.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        user: { select: { username: true } },
-      },
-    });
 
     const prizeDistribution = PRIZE_DISTRIBUTION_PERCENT.map((pct, i) => ({
       rank: i + 1,
