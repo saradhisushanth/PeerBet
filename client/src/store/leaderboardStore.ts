@@ -15,6 +15,7 @@ export interface LeaderboardEntry {
 
 interface LeaderboardState {
   entries: LeaderboardEntry[];
+  lastFetched: number | null;
   loading: boolean;
   error: string | null;
   setEntries: (entries: LeaderboardEntry[]) => void;
@@ -24,9 +25,10 @@ interface LeaderboardState {
 
 export const useLeaderboardStore = create<LeaderboardState>((set) => ({
   entries: [],
+  lastFetched: null,
   loading: false,
   error: null,
-  setEntries: (entries) => set({ entries }),
+  setEntries: (entries) => set({ entries, lastFetched: Date.now() }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
 }));

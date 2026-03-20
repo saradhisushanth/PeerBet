@@ -4,17 +4,25 @@ import { useAuthStore } from "../store/authStore";
 import { api } from "../services/api";
 import { formatCurrency, formatNumber } from "../utils/format";
 
+const STALE_MS = 30_000;
+
 export default function LeaderboardScreen() {
-  const { entries, setEntries, loading, setLoading } = useLeaderboardStore();
+  const { entries, setEntries, loading, setLoading, lastFetched } = useLeaderboardStore();
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
-    setLoading(true);
-    api.leaderboard
-      .getTop()
-      .then((data) => setEntries(data as LeaderboardEntry[]))
-      .finally(() => setLoading(false));
-  }, [setEntries, setLoading]);
+    const hasCache = entries.length > 0;
+    const isStale = !lastFetched || Date.now() - lastFetched > STALE_MS;
+    if (!hasCache) setLoading(true);
+    if (isStale) {
+      api.leaderboard
+        .getTop()
+        .then((data) => setEntries(data as LeaderboardEntry[]))
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [setEntries, setLoading, lastFetched, entries.length]);
 
   return (
     <div className="space-y-6 pb-20">

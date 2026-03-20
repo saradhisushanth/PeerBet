@@ -9,16 +9,18 @@ type Filter = "ALL" | "PENDING" | "WON" | "LOST";
 const MAX_AUTO_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
 
+const STALE_MS = 30_000;
+
 export default function MyBets() {
-  const { bets, setBets } = useBetStore();
+  const { bets, setBets, lastFetched } = useBetStore();
   const [filter, setFilter] = useState<Filter>("ALL");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!bets.length);
   const [error, setError] = useState<string | null>(null);
   const retryCountRef = useRef(0);
 
   const fetchBets = useCallback((autoRetry = false) => {
     let cancelled = false;
-    setLoading(true);
+    if (!bets.length) setLoading(true);
     setError(null);
     api.bets
       .getMy()
@@ -39,13 +41,18 @@ export default function MyBets() {
         }
       });
     return () => { cancelled = true; };
-  }, [setBets]);
+  }, [setBets, bets.length]);
 
   useEffect(() => {
+    const isStale = !lastFetched || Date.now() - lastFetched > STALE_MS;
+    if (!isStale && bets.length > 0) {
+      setLoading(false);
+      return;
+    }
     retryCountRef.current = 0;
     const cleanup = fetchBets(true);
     return cleanup;
-  }, [fetchBets]);
+  }, [fetchBets, lastFetched, bets.length]);
 
   const filtered =
     filter === "ALL" ? bets : bets.filter((b) => b.status === filter);

@@ -8,11 +8,14 @@ type Details = Awaited<ReturnType<typeof api.tournament.getDetails>>;
 
 const MAX_AUTO_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
+const STALE_MS = 30_000;
+
+let tournamentCache: { data: Details; fetchedAt: number } | null = null;
 
 export default function TournamentScreen() {
   const user = useAuthStore((s) => s.user);
-  const [details, setDetails] = useState<Details | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [details, setDetails] = useState<Details | null>(tournamentCache?.data ?? null);
+  const [loading, setLoading] = useState(!tournamentCache);
   const [error, setError] = useState<string | null>(null);
   const [topUpUserId, setTopUpUserId] = useState("");
   const [topUpAmount, setTopUpAmount] = useState("");
@@ -23,13 +26,14 @@ export default function TournamentScreen() {
 
   const fetchDetails = useCallback((autoRetry = false) => {
     let cancelled = false;
-    setLoading(true);
+    if (!tournamentCache) setLoading(true);
     setError(null);
     api.tournament
       .getDetails()
       .then((data) => {
         if (cancelled) return;
         setDetails(data);
+        tournamentCache = { data, fetchedAt: Date.now() };
         retryCountRef.current = 0;
         setLoading(false);
       })
@@ -47,6 +51,11 @@ export default function TournamentScreen() {
   }, []);
 
   useEffect(() => {
+    const isStale = !tournamentCache || Date.now() - tournamentCache.fetchedAt > STALE_MS;
+    if (!isStale) {
+      setLoading(false);
+      return;
+    }
     retryCountRef.current = 0;
     const cleanup = fetchDetails(true);
     return cleanup;

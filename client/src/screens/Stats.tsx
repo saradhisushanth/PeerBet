@@ -6,23 +6,30 @@ import { useBetStore } from "../store/betStore";
 import { api } from "../services/api";
 import { formatCurrency, formatPrizePool } from "../utils/format";
 
+const STALE_MS = 30_000;
+
 export default function Stats() {
-  const { matches, setMatches, setLoading } = useMatchStore();
+  const { matches, setMatches, setLoading, lastFetched: matchesLastFetched } = useMatchStore();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
-  const { bets, setBets } = useBetStore();
+  const { bets, setBets, lastFetched: betsLastFetched } = useBetStore();
   const [streakLoaded, setStreakLoaded] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
-    api.matches.getAll().then((data) => setMatches(data as never)).finally(() => setLoading(false));
-  }, [setMatches, setLoading]);
+    const isStale = !matchesLastFetched || Date.now() - matchesLastFetched > STALE_MS;
+    if (isStale) {
+      if (!matches.length) setLoading(true);
+      api.matches.getAll().then((data) => setMatches(data as never)).finally(() => setLoading(false));
+    }
+  }, [setMatches, setLoading, matchesLastFetched, matches.length]);
 
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+    const isStale = !betsLastFetched || Date.now() - betsLastFetched > STALE_MS;
+    if (isStale) {
       api.bets.getMy().then((data) => setBets(data as never));
     }
-  }, [user, setBets]);
+  }, [user, setBets, betsLastFetched]);
 
   useEffect(() => {
     if (user) {
@@ -40,7 +47,7 @@ export default function Stats() {
   return (
     <div className="space-y-6 pb-20">
       <div>
-        <h1 className="text-2xl font-bold">Stats</h1>
+        <h1 className="text-2xl font-bold">Profile</h1>
         <p className="text-gray-400 text-sm mt-1">Your overview. Add money to your wallet (via admin) to increase your prize pool contribution.</p>
       </div>
 

@@ -45,6 +45,7 @@ interface MatchState {
   selectedMatch: Match | null;
   /** Per-match cache so revisiting a match (e.g. completed) shows last-known state immediately */
   matchDetailCache: Record<string, MatchDetailCacheEntry>;
+  lastFetched: number | null;
   loading: boolean;
   error: string | null;
   setMatches: (matches: Match[]) => void;
@@ -59,9 +60,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   matches: [],
   selectedMatch: null,
   matchDetailCache: {},
+  lastFetched: null,
   loading: false,
   error: null,
-  setMatches: (matches) => set({ matches }),
+  setMatches: (matches) => set({ matches, lastFetched: Date.now() }),
   setSelectedMatch: (match) => set({ selectedMatch: match }),
   setMatchDetailCache: (matchId, entry) =>
     set((state) => ({

@@ -22,6 +22,7 @@ export interface Bet {
 
 interface BetState {
   bets: Bet[];
+  lastFetched: number | null;
   loading: boolean;
   error: string | null;
   setBets: (bets: Bet[]) => void;
@@ -33,9 +34,10 @@ interface BetState {
 
 export const useBetStore = create<BetState>((set) => ({
   bets: [],
+  lastFetched: null,
   loading: false,
   error: null,
-  setBets: (bets) => set({ bets }),
+  setBets: (bets) => set({ bets, lastFetched: Date.now() }),
   addBet: (bet) => set((state) => ({ bets: [bet, ...state.bets] })),
   updateBetStatus: (betId, status) =>
     set((state) => ({

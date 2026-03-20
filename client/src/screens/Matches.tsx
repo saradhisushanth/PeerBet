@@ -10,18 +10,26 @@ const ROW_HEIGHT = 140;
 const ROW_GAP = 16;
 const OVERSCAN = 4;
 
+const STALE_MS = 30_000;
+
 export default function Matches() {
-  const { matches, setMatches, loading, setLoading } = useMatchStore();
+  const { matches, setMatches, loading, setLoading, lastFetched } = useMatchStore();
   const [filter, setFilter] = useState<StatusFilter>("LIVE");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setLoading(true);
-    api.matches
-      .getAll()
-      .then((data) => setMatches(data as Match[]))
-      .finally(() => setLoading(false));
-  }, [setMatches, setLoading]);
+    const hasCache = matches.length > 0;
+    const isStale = !lastFetched || Date.now() - lastFetched > STALE_MS;
+    if (!hasCache) setLoading(true);
+    if (isStale) {
+      api.matches
+        .getAll()
+        .then((data) => setMatches(data as Match[]))
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [setMatches, setLoading, lastFetched, matches.length]);
 
   const filtered =
     filter === "ALL" ? matches : matches.filter((m) => m.status === filter);

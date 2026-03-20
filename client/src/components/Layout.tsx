@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import type { WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
+import { useMatchStore } from "../store/matchStore";
+import { useBetStore, type Bet } from "../store/betStore";
+import { useLeaderboardStore } from "../store/leaderboardStore";
 import { api } from "../services/api";
 import { formatCurrency } from "../utils/format";
 import { useSocket, useSocketEvent } from "../hooks/useSocket";
@@ -15,6 +18,18 @@ export default function Layout() {
   const [soloWinSnack, setSoloWinSnack] = useState<number | null>(null);
   const [soloByeSnack, setSoloByeSnack] = useState<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const setMatches = useMatchStore((s) => s.setMatches);
+  const setBets = useBetStore((s) => s.setBets);
+  const setLeaderboard = useLeaderboardStore((s) => s.setEntries);
+
+  // Prefetch all core data on login so tabs render instantly
+  useEffect(() => {
+    if (!token) return;
+    api.matches.getAll().then((d) => setMatches(d as any[])).catch(() => {});
+    api.bets.getMy().then((d) => setBets(d as Bet[])).catch(() => {});
+    api.leaderboard.getTop().then((d) => setLeaderboard(d as any[])).catch(() => {});
+  }, [token, setMatches, setBets, setLeaderboard]);
 
   // Refetch user (balance, etc.) when tab becomes visible so multi-tab and relogin stay in sync
   useEffect(() => {
