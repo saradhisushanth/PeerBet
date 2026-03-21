@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-100;
+    @apply bg-slate-100 text-slate-900;
   }
 }
 
@@ -39,4 +39,19 @@
 .stake-value-transition {
   display: inline-block;
   animation: stake-value-in 0.22s ease-out;
+}
+
+@keyframes skeleton-wave {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f8fafc 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-wave 1.25s ease-in-out infinite;
 }

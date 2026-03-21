@@ -30,51 +30,51 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center font-bold text-lg mx-auto mb-4">
             IP
           </div>
           <h1 className="text-2xl font-bold">Create your account</h1>
-          <p className="text-gray-400 text-sm mt-1">Start with 1,000 credits to bet</p>
+          <p className="text-slate-500 text-sm mt-1">Start with 1,000 credits to bet</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 shadow-sm">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Username</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
               minLength={3}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="Pick a username"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Email</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="At least 6 characters"
             />
           </div>
@@ -84,12 +84,12 @@ export default function Register() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors"
+            className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-slate-300 disabled:text-slate-500 rounded-lg text-sm font-medium transition-colors"
           >
             {loading ? "Creating account..." : "Create Account"}
           </button>
 
-          <p className="text-center text-sm text-gray-400">
+          <p className="text-center text-sm text-slate-500">
             Already have an account?{" "}
             <Link to="/login" className="text-primary-400 hover:text-primary-300 font-medium">
               Sign in

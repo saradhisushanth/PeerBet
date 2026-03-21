@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMatchStore, type Match, type MatchSummary as MatchSummaryType } from "../store/matchStore";
 import { useAuthStore } from "../store/authStore";
 import { useBetStore, type Bet } from "../store/betStore";
@@ -571,7 +571,7 @@ export default function MatchDetail() {
   if (!selectedMatch) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
-        <p className="text-gray-500">Loading match...</p>
+        <p className="text-slate-500">Loading match...</p>
       </div>
     );
   }
@@ -650,18 +650,25 @@ export default function MatchDetail() {
   return (
     <div className={bettingOpen ? "pb-80" : "pb-32"}>
       {/* TOP BAR: Match | Timer | Pool | Notifications */}
-      <header className="sticky top-0 z-40 grid grid-cols-4 gap-2 items-center border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm px-3 py-2">
-        <div className="truncate text-sm font-semibold" title={`${home.shortName} vs ${away.shortName}`}>
-          {home.shortName} vs {away.shortName}
+      <header className="sticky top-0 z-40 grid grid-cols-4 gap-2 items-center border-b border-slate-200 bg-white/95 backdrop-blur-sm px-3 py-2">
+        <div className="truncate text-sm font-semibold flex items-center gap-2" title={`${home.shortName} vs ${away.shortName}`}>
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center h-7 px-2 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors"
+            title="Back to fixtures"
+          >
+            ←
+          </Link>
+          <span className="truncate">{home.shortName} vs {away.shortName}</span>
         </div>
-        <div className="text-center text-xs text-gray-400" title={selectedMatch.tossTime ? "Betting closes at toss" : "Betting closes 30 min before match"}>
+        <div className="text-center text-xs text-slate-500" title={selectedMatch.tossTime ? "Betting closes at toss" : "Betting closes 30 min before match"}>
           {isUpcoming ? "Toss in " + formatBetLockCountdown(countdown) : "—"}
         </div>
         <div className="text-center text-xs font-medium text-green-400" title="Total stakes on this match from all players">
           {formatCurrency(totalPool)}
         </div>
         <div className="flex justify-end">
-          <span className="text-gray-500 text-xs" aria-label="Notifications" title="Notifications">🔔</span>
+          <span className="text-slate-500 text-xs" aria-label="Notifications" title="Notifications">🔔</span>
         </div>
       </header>
 
@@ -672,7 +679,7 @@ export default function MatchDetail() {
             <p className="text-xs font-medium text-amber-400">
               ⏱ When betting locks, the last 2 participants (by overall leaderboard rank) will be auto-assigned to the other side to balance the match.
             </p>
-            <p className="text-xs text-gray-300 mt-1">
+            <p className="text-xs text-amber-700/90 mt-1">
               {participantCount === 2
                 ? "With only 2 players, the one with the lower leaderboard rank will be moved."
                 : participantCount === 1
@@ -688,11 +695,11 @@ export default function MatchDetail() {
       {/* Solo participant: one player only — win bonus + bye refund (bettor only) */}
       {bettingOpen && isSoleBettor && (
         <div className="px-3 pt-2">
-          <div className="rounded-xl border border-gray-600 bg-gray-800/50 p-3 max-w-xl">
-            <p className="text-xs font-medium text-gray-400">
+          <div className="rounded-xl border border-slate-300 bg-slate-50 p-3 max-w-xl">
+            <p className="text-xs font-medium text-slate-600">
               Only one player has bet on this match. No auto-assign.
             </p>
-            <p className="text-xs text-gray-300 mt-1">
+            <p className="text-xs text-slate-600 mt-1">
               If you win: you get your stake back plus a bonus equal to double your stake. If you lose: you get 50% of your stake back (bye — no full penalty) and it doesn’t count as a loss on the leaderboard.
             </p>
           </div>
@@ -706,7 +713,7 @@ export default function MatchDetail() {
             <p className="text-xs font-medium text-amber-400">
               You haven&apos;t placed a bet on this match.
             </p>
-            <p className="text-xs text-gray-300 mt-1">
+            <p className="text-xs text-amber-700/90 mt-1">
               {consecutiveMissed === 0
                 ? "Missing matches reduces your balance (from 2nd miss: −💰 50 per missed match). Balance can go to 0; top up via admin to play again."
                 : `You've missed ${consecutiveMissed} match${consecutiveMissed === 1 ? "" : "es"}. Miss ${consecutiveMissed === 1 ? "one more" : "another"} and your balance will drop (can go to 0). Top up to play.`}
@@ -719,14 +726,14 @@ export default function MatchDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 py-4">
         {/* LEFT: Momentum Card */}
         <aside className="lg:col-span-3">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4" title="Share of total stake on each team (not odds)">
-            <h3 className="text-xs font-semibold text-gray-400 mb-2">Momentum</h3>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm" title="Share of total stake on each team (not odds)">
+            <h3 className="text-xs font-semibold text-slate-500 mb-2">Momentum</h3>
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-medium">
-                <span>{home.shortName} <span className="text-gray-300">{momentumHome}%</span></span>
-                <span>{away.shortName} <span className="text-gray-300">{momentumAway}%</span></span>
+                <span>{home.shortName} <span className="text-slate-600">{momentumHome}%</span></span>
+                <span>{away.shortName} <span className="text-slate-600">{momentumAway}%</span></span>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden flex">
+              <div className="h-2 bg-slate-200 rounded-full overflow-hidden flex">
                 <div className={`${teamBarColor[home.shortName] ?? "bg-primary-500"} h-full transition-all`} style={{ width: `${momentumHome}%` }} title={`${home.shortName} ${momentumHome}%`} />
                 <div className={`${teamBarColor[away.shortName] ?? "bg-accent-500"} h-full`} style={{ width: `${momentumAway}%` }} title={`${away.shortName} ${momentumAway}%`} />
               </div>
@@ -752,7 +759,7 @@ export default function MatchDetail() {
               winnerTeamId={selectedMatch.winner?.id ?? null}
             />
           ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 min-h-[120px] flex items-center justify-center text-gray-500 text-sm">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 min-h-[120px] flex items-center justify-center text-slate-500 text-sm shadow-sm">
               Loading board...
             </div>
           )}
@@ -761,15 +768,15 @@ export default function MatchDetail() {
         {/* RIGHT: Match results (when settled) + History Feed */}
         <aside className="lg:col-span-3 space-y-4">
           {settlementResults.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <h3 className="text-xs font-semibold text-gray-400 px-3 py-2 border-b border-gray-800">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <h3 className="text-xs font-semibold text-slate-500 px-3 py-2 border-b border-slate-200">
                 Match results
               </h3>
-              <p className="px-3 py-1 text-[10px] text-gray-500 border-b border-gray-800">
+              <p className="px-3 py-1 text-[10px] text-slate-500 border-b border-slate-200">
                 Profit = pool share + underdog bonus (1.3× if you backed the underdog) + streak bonus (2nd–5th consecutive win).
               </p>
-              <div className="divide-y divide-gray-800">
-                <div className="px-3 py-2 grid grid-cols-[minmax(0,1fr)_3.5rem_5rem_2.5rem_5rem] gap-x-4 gap-y-0 text-xs text-gray-500 items-center">
+              <div className="divide-y divide-slate-200">
+                <div className="px-3 py-2 grid grid-cols-[minmax(0,1fr)_3.5rem_5rem_2.5rem_5rem] gap-x-4 gap-y-0 text-xs text-slate-500 items-center">
                   <span>Player</span>
                   <span className="text-right" title="Team they bet on">Side</span>
                   <span className="text-right" title="Pool share + underdog bonus + streak bonus minus stake">Profit</span>
@@ -782,11 +789,11 @@ export default function MatchDetail() {
                       <strong className={r.userId === user?.id ? "text-primary-400" : ""}>{r.username}</strong>
                       {r.userId === user?.id && " (you)"}
                     </span>
-                    <span className="text-right text-gray-400">{r.side}</span>
+                    <span className="text-right text-slate-500">{r.side}</span>
                     <span className={`text-right font-medium tabular-nums ${r.poolGained >= 0 ? "text-green-400" : "text-red-400"}`}>
                       {r.poolGained >= 0 ? "+" : ""}{formatCurrency(r.poolGained, 2)}
                     </span>
-                    <span className="text-right text-gray-400 tabular-nums">{r.winningStreakAfter != null ? r.winningStreakAfter : "—"}</span>
+                    <span className="text-right text-slate-500 tabular-nums">{r.winningStreakAfter != null ? r.winningStreakAfter : "—"}</span>
                     <span className="text-right text-amber-400 tabular-nums">{r.streakBonus != null && r.streakBonus > 0 ? "+" + formatCurrency(r.streakBonus, 0) : "—"}</span>
                   </div>
                 ))}
@@ -816,11 +823,11 @@ export default function MatchDetail() {
             );
           })()}
 
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col h-52">
-            <h3 className="text-xs font-semibold text-gray-400 px-3 py-2 border-b border-gray-800 shrink-0" title="Recent bets and bet removals for this match">History Feed</h3>
-            <div className="divide-y divide-gray-800 min-h-0 flex-1 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col h-52 shadow-sm">
+            <h3 className="text-xs font-semibold text-slate-500 px-3 py-2 border-b border-slate-200 shrink-0" title="Recent bets and bet removals for this match">History Feed</h3>
+            <div className="divide-y divide-slate-200 min-h-0 flex-1 overflow-y-auto">
               {recentBets.length === 0 && recentRemovals.length === 0 ? (
-                <p className="px-3 py-4 text-gray-500 text-xs">No activity yet</p>
+                <p className="px-3 py-4 text-slate-500 text-xs">No activity yet</p>
               ) : (
                 [
                   ...recentBets.map((b) => ({ type: "bet" as const, id: b.id, username: b.username, amount: b.amount, teamShortName: b.teamShortName, at: new Date(b.createdAt).getTime() })),
@@ -835,7 +842,7 @@ export default function MatchDetail() {
                         <span className={`font-medium ${isMe ? "text-primary-400" : ""}`}>{entry.username}</span> bet {formatCurrency(entry.amount)} on {entry.teamShortName}
                       </div>
                     ) : (
-                      <div key={entry.id} className="px-3 py-1.5 text-xs text-gray-400">
+                      <div key={entry.id} className="px-3 py-1.5 text-xs text-slate-500">
                         <span className={`font-medium ${isMe ? "text-primary-400" : ""}`}>{entry.username}</span> removed {formatCurrency(entry.amount)} bet
                       </div>
                     );
@@ -850,15 +857,15 @@ export default function MatchDetail() {
       {isAdmin && selectedMatch && (
         <div className="rounded-xl border border-amber-500/50 bg-amber-500/5 p-3">
           <p className="text-xs font-medium text-amber-400 mb-2">Admin — Toss time</p>
-          <p className="text-xs text-gray-400 mb-2">Betting closes at this time. Leave empty to use 30 min before match start. To test lock rebalance (e.g. everyone on same side), set toss to a time already in the past.</p>
+          <p className="text-xs text-slate-500 mb-2">Betting closes at this time. Leave empty to use 30 min before match start. To test lock rebalance (e.g. everyone on same side), set toss to a time already in the past.</p>
           <form onSubmit={handleSaveTimes} className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1" title="When betting closes; empty = 30 min before match">Toss time</label>
+              <label className="block text-xs text-slate-500 mb-1" title="When betting closes; empty = 30 min before match">Toss time</label>
               <input
                 type="datetime-local"
                 value={tossTimeInput}
                 onChange={(e) => setTossTimeInput(e.target.value)}
-                className="w-full max-w-xs bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+                className="w-full max-w-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
               />
             </div>
             {timesError && <p className="text-xs text-red-400">{timesError}</p>}
@@ -867,12 +874,12 @@ export default function MatchDetail() {
             </button>
           </form>
           <div className="mt-3 pt-3 border-t border-amber-500/30">
-            <p className="text-xs text-gray-400 mb-2">If everyone bet on the same side, run lock rebalance to move one (or two) to the other side.</p>
+            <p className="text-xs text-slate-500 mb-2">If everyone bet on the same side, run lock rebalance to move one (or two) to the other side.</p>
             <button
               type="button"
               onClick={handleForceRebalance}
               disabled={rebalanceLoading}
-              className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-600/80 text-white hover:bg-gray-500 disabled:opacity-50"
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-slate-600 text-white hover:bg-slate-700 disabled:opacity-50"
               title="Move 1–2 players (worst leaderboard rank) to the other side when everyone bet on the same team"
             >
               {rebalanceLoading ? "Running…" : "Run lock rebalance now"}
@@ -912,7 +919,7 @@ export default function MatchDetail() {
 
       {/* Upset alert toast */}
       {upsetMessage && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-amber-500/90 text-gray-900 font-semibold text-sm shadow-lg animate-pulse">
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-amber-500/90 text-slate-900 font-semibold text-sm shadow-lg animate-pulse">
           🏆 {upsetMessage}
           <button type="button" onClick={() => setUpsetMessage(null)} className="ml-2 opacity-80">×</button>
         </div>
@@ -920,7 +927,7 @@ export default function MatchDetail() {
 
       {/* BOTTOM: Bet Controls — only until toss time; disabled when countdown 0 */}
       {bettingOpen && (
-        <div className="fixed left-0 right-0 bottom-14 z-40 px-4 pb-2 pt-3 bg-gray-900/95 border-t border-gray-800">
+        <div className="fixed left-0 right-0 bottom-14 z-40 px-4 pb-2 pt-3 bg-white/95 border-t border-slate-200 backdrop-blur-sm shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
           <div className="max-w-lg mx-auto space-y-3">
             {maxStake < MIN_STAKE && user && (
               <p className="text-xs text-amber-400 bg-amber-500/10 rounded-lg px-2 py-1.5 border border-amber-500/30">
@@ -932,24 +939,24 @@ export default function MatchDetail() {
                 You’re staking your full balance. You’ll need an admin top-up to bet on the next match.
               </p>
             )}
-            <div className="rounded-xl border border-gray-700 bg-gray-800/50 overflow-hidden">
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
               <button
                 type="button"
                 onClick={() => setStakeCollapsed((c) => !c)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-700/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
                 aria-expanded={!stakeCollapsed}
               >
                 <span className="text-sm font-medium" title="Amount you put on your chosen team">Stake</span>
-                <span className="text-xs text-gray-400" title="Betting locks at toss">
+                <span className="text-xs text-slate-500" title="Betting locks at toss">
                   Lock in {formatBetLockCountdown(countdown)}
                 </span>
-                <span className="text-gray-500 text-sm" aria-hidden>{stakeCollapsed ? "▼" : "▲"}</span>
+                <span className="text-slate-500 text-sm" aria-hidden>{stakeCollapsed ? "▼" : "▲"}</span>
               </button>
               {!stakeCollapsed && (
-                <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-700">
+                <div className="px-3 pb-3 pt-1 space-y-3 border-t border-slate-200">
                   {myBetAmount > 0 && myBetTeamName && (
-                    <p className="text-xs text-gray-300">
-                      Your bet: <span className="font-medium text-white">{formatCurrency(myBetAmount)}</span> on {myBetTeamName}
+                    <p className="text-xs text-slate-600">
+                      Your bet: <span className="font-medium text-slate-900">{formatCurrency(myBetAmount)}</span> on {myBetTeamName}
                       {myBetInsured && <span className="text-amber-400 ml-1">🛡 Insured</span>}
                     </p>
                   )}
@@ -997,7 +1004,7 @@ export default function MatchDetail() {
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         stakeLocked
                           ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
-                          : "bg-gray-700 text-gray-300 border border-gray-600 hover:bg-gray-600"
+                          : "bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200"
                       }`}
                       title={
                         stakeLocked
@@ -1030,7 +1037,7 @@ export default function MatchDetail() {
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
                         }}
-                        className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
+                        className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-300 hover:bg-slate-200 text-sm font-bold disabled:opacity-50"
                       >
                         -10
                       </button>
@@ -1050,7 +1057,7 @@ export default function MatchDetail() {
                           }}
                           onChange={(e) => setStakeInputValue(toIntegerStake(e.target.value))}
                           className={`w-16 text-center font-bold border rounded-lg px-1 py-1.5 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                            stakeLocked ? "bg-gray-900 border-amber-500/40 text-amber-400" : "bg-gray-800 border-gray-600"
+                            stakeLocked ? "bg-amber-50 border-amber-300 text-amber-600" : "bg-white border-slate-300 text-slate-800"
                           }`}
                           aria-label="Stake amount"
                         />
@@ -1075,7 +1082,7 @@ export default function MatchDetail() {
                           setStakeInputValue(String(newStake));
                           setStakeProtected(newStake);
                         }}
-                        className="w-9 h-9 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-50"
+                        className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-300 hover:bg-slate-200 text-sm font-bold disabled:opacity-50"
                       >
                         +10
                       </button>
@@ -1088,7 +1095,7 @@ export default function MatchDetail() {
                   )}
                   {participantCount >= 1 && (
                     <>
-                      <p className="text-xs text-gray-500" title="Max is the lower of: current pool (excluding your bet) or your available balance">
+                      <p className="text-xs text-slate-500" title="Max is the lower of: current pool (excluding your bet) or your available balance">
                         Min {formatCurrency(MIN_STAKE)} · Max {formatCurrency(maxStake)} (pool, capped by balance)
                       </p>
                       {totalPool > 0 && (
@@ -1101,12 +1108,12 @@ export default function MatchDetail() {
                 </div>
               )}
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer" title="Cost is deducted when you place the bet; if your side loses you get 50% of your stake back">
+            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer" title="Cost is deducted when you place the bet; if your side loses you get 50% of your stake back">
               <input
                 type="checkbox"
                 checked={insured}
                 onChange={(e) => setInsured(e.target.checked)}
-                className="rounded border-gray-600"
+                className="rounded border-slate-300"
               />
               <span>Insurance: {formatCurrency(INSURANCE_COST)} — get {INSURANCE_REFUND_PERCENT}% stake back if you lose</span>
             </label>

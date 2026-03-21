@@ -17,11 +17,11 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "prisma": "^7.5.0",
+    "prisma": "^6.19.2",
     "tsx": "^4.19.3"
   },
   "dependencies": {
-    "@prisma/client": "^7.5.0",
+    "@prisma/client": "^6.19.2",
     "dotenv": "^17.3.1"
   }
 }

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Outlet, useNavigate, useLocation, NavLink } from "react-router-dom";
 import type { MatchUpdatePayload, WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
 import { useMatchStore } from "../store/matchStore";
@@ -9,22 +9,47 @@ import { api } from "../services/api";
 import { formatCurrency } from "../utils/format";
 import { useSocket, useSocketEvent } from "../hooks/useSocket";
 import BottomNav from "./BottomNav";
+import MatchesPanel from "./MatchesPanel";
+import ProfilePanel from "./ProfilePanel";
+
+const desktopTabs = [
+  { to: "/", label: "Board" },
+  { to: "/leaderboard", label: "Leaderboard" },
+  { to: "/tournament", label: "Tournament" },
+  { to: "/history", label: "History" },
+  { to: "/stats", label: "Profile" },
+] as const;
 
 export default function Layout() {
   const { user, logout, updateUser, token } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [topUpSnack, setTopUpSnack] = useState<number | null>(null);
   const [insuranceRefundSnack, setInsuranceRefundSnack] = useState<number | null>(null);
   const [soloWinSnack, setSoloWinSnack] = useState<number | null>(null);
   const [soloByeSnack, setSoloByeSnack] = useState<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [activePanel, setActivePanel] = useState<"matches" | "detail" | "profile">("matches");
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const setMatches = useMatchStore((s) => s.setMatches);
   const applyMatchUpdateFromSocket = useMatchStore((s) => s.applyMatchUpdateFromSocket);
   const setBets = useBetStore((s) => s.setBets);
   const setLeaderboard = useLeaderboardStore((s) => s.setEntries);
 
-  // Prefetch all core data on login so tabs render instantly
+  // Map routes to panels for mobile
+  useEffect(() => {
+    if (location.pathname === "/" || location.pathname.startsWith("/matches")) {
+      setActivePanel(location.pathname === "/" ? "matches" : "detail");
+    } else if (location.pathname === "/stats") {
+      setActivePanel("profile");
+    } else {
+      setActivePanel("detail");
+    }
+  }, [location.pathname]);
+
+  // Prefetch all core data on login
   useEffect(() => {
     if (!token) return;
     api.matches.getAll().then((d) => setMatches(d as any[])).catch(() => {});
@@ -32,7 +57,7 @@ export default function Layout() {
     api.leaderboard.getTop().then((d) => setLeaderboard(d as any[])).catch(() => {});
   }, [token, setMatches, setBets, setLeaderboard]);
 
-  // Refetch user (balance, etc.) when tab becomes visible so multi-tab and relogin stay in sync
+  // Refetch user when tab becomes visible
   useEffect(() => {
     if (!token) return;
     const onVisible = () => {
@@ -47,14 +72,13 @@ export default function Layout() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [token, updateUser]);
 
-  useSocket(); // keep socket connected when logged in so we receive walletTopUp + betSettled
+  useSocket();
+
   const onWalletTopUp = useCallback((data: WalletTopUpPayload) => {
-      updateUser({ balance: data.newBalance, prizePoolContribution: data.newPrizePoolContribution });
-      setTopUpSnack(data.amount);
-      setTimeout(() => setTopUpSnack(null), 6000);
-    },
-    [updateUser]
-  );
+    updateUser({ balance: data.newBalance, prizePoolContribution: data.newPrizePoolContribution });
+    setTopUpSnack(data.amount);
+    setTimeout(() => setTopUpSnack(null), 6000);
+  }, [updateUser]);
   useSocketEvent("walletTopUp", onWalletTopUp);
 
   const onBetSettled = useCallback(
@@ -86,6 +110,34 @@ export default function Layout() {
   );
   useSocketEvent("matchUpdate", onMatchUpdate);
 
+  // Swipe handling for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchStart - touchEnd;
+    const threshold = 50;
+
+    if (Math.abs(diff) < threshold) return;
+
+    // Swipe left (next panel) or right (prev panel)
+    const panels: Array<"matches" | "detail" | "profile"> = ["matches", "detail", "profile"];
+    const currentIndex = panels.indexOf(activePanel);
+
+    if (diff > 0 && currentIndex < panels.length - 1) {
+      // Swipe left
+      setActivePanel(panels[currentIndex + 1]);
+    } else if (diff < 0 && currentIndex > 0) {
+      // Swipe right
+      setActivePanel(panels[currentIndex - 1]);
+    }
+
+    setTouchStart(null);
+  };
+
   function handleLogout() {
     setShowLogoutConfirm(true);
   }
@@ -97,77 +149,55 @@ export default function Layout() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-950">
-      {topUpSnack != null && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-green-500/90 text-gray-900 font-semibold text-sm shadow-lg animate-pulse flex items-center gap-2">
-          Wallet topped up: +{formatCurrency(topUpSnack)}
-          <button type="button" onClick={() => setTopUpSnack(null)} className="opacity-80 hover:opacity-100">×</button>
-        </div>
-      )}
-      {insuranceRefundSnack != null && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-amber-500/90 text-gray-900 font-semibold text-sm shadow-lg animate-pulse flex items-center gap-2">
-          🛡 Insurance refund: +{formatCurrency(insuranceRefundSnack)}
-          <button type="button" onClick={() => setInsuranceRefundSnack(null)} className="opacity-80 hover:opacity-100">×</button>
-        </div>
-      )}
-      {soloWinSnack != null && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-green-500/90 text-gray-900 font-semibold text-sm shadow-lg animate-pulse flex items-center gap-2">
-          🎯 Solo win bonus: +{formatCurrency(soloWinSnack)}
-          <button type="button" onClick={() => setSoloWinSnack(null)} className="opacity-80 hover:opacity-100">×</button>
-        </div>
-      )}
-      {soloByeSnack != null && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-blue-500/90 text-gray-900 font-semibold text-sm shadow-lg animate-pulse flex items-center gap-2">
-          Bye refund (solo): +{formatCurrency(soloByeSnack)}
-          <button type="button" onClick={() => setSoloByeSnack(null)} className="opacity-80 hover:opacity-100">×</button>
-        </div>
-      )}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 mx-4 max-w-xs w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-white text-center">Logout?</h3>
-            <p className="text-sm text-gray-400 text-center mt-2">Are you sure you want to logout? You'll need to sign in again to place bets.</p>
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors border border-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmLogout}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-500 transition-colors"
-              >
-                Logout
-              </button>
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-100 text-slate-900">
+      {/* Header */}
+      <header className="flex-shrink-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+        <div className="px-4 h-12 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden">
+              <img
+                src="/brand-logo.png"
+                alt="PeerBet"
+                className="h-6 w-6 object-contain"
+              />
             </div>
+            <nav className="hidden lg:flex items-center gap-1" aria-label="Desktop navigation">
+              {desktopTabs.map((tab) => (
+                <NavLink
+                  key={tab.to}
+                  to={tab.to}
+                  end={tab.to === "/"}
+                  className={({ isActive }) =>
+                    `px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                      isActive
+                        ? "bg-rose-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`
+                  }
+                >
+                  {tab.label}
+                </NavLink>
+              ))}
+            </nav>
           </div>
-        </div>
-      )}
-
-      <header className="flex-shrink-0 z-50 border-b border-gray-800 bg-gray-900/90 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto px-4 h-12 flex items-center justify-between">
-          <span className="text-sm font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
-            PEERBet
-          </span>
           <div className="flex items-center gap-3">
             {user && (
               <button
                 onClick={() => navigate("/stats")}
-                className="text-sm text-primary-400 font-semibold truncate max-w-[100px] hover:text-primary-300 transition-colors"
+                className="text-sm text-rose-700 font-semibold truncate max-w-[100px] hover:text-rose-600 transition-colors"
                 title={`${user.username} — View profile`}
               >
                 {user.username}
               </button>
             )}
-            <span className="text-xs text-gray-400">·</span>
-            <span className="text-xs text-gray-400">Balance:</span>
-            <span className="text-sm font-semibold text-green-400">
+            <span className="text-xs text-slate-300">·</span>
+            <span className="text-xs text-slate-500">Balance:</span>
+            <span className="text-sm font-semibold text-emerald-600">
               {user?.balance != null ? formatCurrency(user.balance, 2) : formatCurrency(0, 2)}
             </span>
             <button
               onClick={handleLogout}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-500/10 transition-colors"
               title="Logout"
               aria-label="Logout"
             >
@@ -181,13 +211,106 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-hidden max-w-lg mx-auto w-full px-4 py-4 flex flex-col">
-        <div className="flex-1 min-h-0 flex flex-col overflow-auto">
+      {/* Desktop/tablet layout */}
+      <div className="hidden lg:grid lg:grid-cols-[270px_1fr_280px] xl:grid-cols-[320px_1fr_300px] flex-1 min-h-0 overflow-hidden gap-3 xl:gap-4 p-3 xl:p-4">
+        {/* Left: Matches Panel */}
+        <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-hidden shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
+          <MatchesPanel />
+        </div>
+
+        {/* Center: Main Content */}
+        <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-auto shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
           <Outlet />
         </div>
-      </main>
 
+        {/* Right: Profile Panel */}
+        <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-hidden shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
+          <ProfilePanel />
+        </div>
+      </div>
+
+      {/* Mobile/Tablet 1-3 panel view */}
+      <div className="lg:hidden flex-1 min-h-0 overflow-hidden relative">
+        <div
+          ref={panelRef}
+          className="flex h-full transition-transform duration-300 ease-out"
+          style={{
+            transform: `translateX(calc(-${["matches", "detail", "profile"].indexOf(activePanel) * 100}%))`,
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Matches Panel */}
+          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
+            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+              <MatchesPanel />
+            </div>
+          </div>
+
+          {/* Detail Panel */}
+          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
+            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-auto shadow-sm">
+              <Outlet />
+            </div>
+          </div>
+
+          {/* Profile Panel */}
+          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
+            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+              <ProfilePanel />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Navigation */}
       <BottomNav />
+
+      {/* Logout confirmation modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold">Confirm logout?</h3>
+            <p className="text-slate-500 text-sm mt-2">You will be signed out of your account.</p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors text-white"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snackbars */}
+      {topUpSnack && (
+        <div className="fixed bottom-20 left-4 right-4 bg-green-600 text-white rounded-lg px-4 py-2 text-sm">
+          +₹{topUpSnack} added to balance
+        </div>
+      )}
+      {insuranceRefundSnack && (
+        <div className="fixed bottom-20 left-4 right-4 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm">
+          ₹{insuranceRefundSnack} insurance refund
+        </div>
+      )}
+      {soloWinSnack && (
+        <div className="fixed bottom-20 left-4 right-4 bg-yellow-600 text-white rounded-lg px-4 py-2 text-sm">
+          ₹{soloWinSnack} solo bonus
+        </div>
+      )}
+      {soloByeSnack && (
+        <div className="fixed bottom-20 left-4 right-4 bg-purple-600 text-white rounded-lg px-4 py-2 text-sm">
+          ₹{soloByeSnack} solo bye refund
+        </div>
+      )}
     </div>
   );
 }
