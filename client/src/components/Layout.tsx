@@ -29,6 +29,9 @@ export default function Layout() {
   const [soloWinSnack, setSoloWinSnack] = useState<number | null>(null);
   const [soloByeSnack, setSoloByeSnack] = useState<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : false
+  );
   const [activePanel, setActivePanel] = useState<"matches" | "detail" | "profile">("matches");
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -56,6 +59,13 @@ export default function Layout() {
     api.bets.getMy().then((d) => setBets(d as Bet[])).catch(() => {});
     api.leaderboard.getTop().then((d) => setLeaderboard(d as any[])).catch(() => {});
   }, [token, setMatches, setBets, setLeaderboard]);
+
+  useEffect(() => {
+    const onResize = () => setIsDesktopViewport(window.innerWidth >= 1024);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Refetch user when tab becomes visible
   useEffect(() => {
@@ -212,7 +222,8 @@ export default function Layout() {
       </header>
 
       {/* Desktop/tablet layout */}
-      <div className="hidden lg:grid lg:grid-cols-[270px_1fr_280px] xl:grid-cols-[320px_1fr_300px] flex-1 min-h-0 overflow-hidden gap-3 xl:gap-4 p-3 xl:p-4">
+      {isDesktopViewport && (
+      <div className="lg:grid lg:grid-cols-[270px_1fr_280px] xl:grid-cols-[320px_1fr_300px] flex-1 min-h-0 overflow-hidden gap-3 xl:gap-4 p-3 xl:p-4">
         {/* Left: Matches Panel */}
         <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-hidden shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
           <MatchesPanel />
@@ -228,9 +239,11 @@ export default function Layout() {
           <ProfilePanel />
         </div>
       </div>
+      )}
 
       {/* Mobile/Tablet 1-3 panel view */}
-      <div className="lg:hidden flex-1 min-h-0 overflow-hidden relative">
+      {!isDesktopViewport && (
+      <div className="flex-1 min-h-0 overflow-hidden relative">
         <div
           ref={panelRef}
           className="flex h-full transition-transform duration-300 ease-out"
@@ -262,9 +275,10 @@ export default function Layout() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Bottom Navigation */}
-      <BottomNav />
+      {!isDesktopViewport && <BottomNav />}
 
       {/* Logout confirmation modal */}
       {showLogoutConfirm && (
