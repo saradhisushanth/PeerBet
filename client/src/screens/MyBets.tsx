@@ -160,7 +160,7 @@ export default function MyBets() {
         </div>
 
         {/* ── Filter Tabs ─────────────────────────────────────────────────── */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           {(["ALL", "PENDING", "WON", "LOST"] as Filter[]).map((f) => {
             const active = filter === f;
             const dotColor = f === "ALL" ? "bg-slate-400" : STATUS_STYLE[f]?.dot ?? "bg-slate-400";
@@ -168,7 +168,7 @@ export default function MyBets() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                   active
                     ? "bg-rose-600 text-white shadow-sm"
                     : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -178,7 +178,7 @@ export default function MyBets() {
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${active ? "bg-white/70" : dotColor}`} />
                 )}
                 {FILTER_LABELS[f]}
-                <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-bold leading-none ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
                   {counts[f]}
                 </span>
               </button>

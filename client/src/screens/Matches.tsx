@@ -104,14 +104,14 @@ export default function Matches() {
           </div>
 
           {/* Filter tabs — pushed right on sm+ */}
-          <div className="flex flex-wrap gap-2 sm:justify-end">
+          <div className="flex flex-wrap gap-1.5 sm:justify-end">
             {(["ALL", "UPCOMING", "LIVE", "COMPLETED"] as StatusFilter[]).map((f) => {
               const active = filter === f;
               return (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                     active
                       ? "bg-rose-600 text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -242,7 +242,7 @@ export default function Matches() {
                         <div className="flex flex-col items-center gap-2 shrink-0">
                           <p className="text-sm font-extrabold tracking-widest text-slate-400">VS</p>
                           <span
-                            className={`inline-flex items-center justify-center h-8 w-[110px] rounded-xl text-[13px] font-bold tracking-wide ${statusBadgeStyle[match.status]}`}
+                            className={`inline-flex items-center justify-center h-7 w-[92px] rounded-lg text-[11px] font-bold tracking-[0.03em] ${statusBadgeStyle[match.status]}`}
                           >
                             {match.status === "LIVE" && (
                               <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/70 animate-pulse mr-1.5" />

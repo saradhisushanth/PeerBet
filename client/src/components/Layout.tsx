@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, NavLink } from "react-router-dom";
 import type { MatchUpdatePayload, WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
@@ -32,25 +32,13 @@ export default function Layout() {
   const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 1024 : false
   );
-  const [activePanel, setActivePanel] = useState<"matches" | "detail" | "profile">("matches");
   const [touchStart, setTouchStart] = useState<number | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   const setMatches = useMatchStore((s) => s.setMatches);
   const applyMatchUpdateFromSocket = useMatchStore((s) => s.applyMatchUpdateFromSocket);
   const setBets = useBetStore((s) => s.setBets);
   const setLeaderboard = useLeaderboardStore((s) => s.setEntries);
-
-  // Map routes to panels for mobile
-  useEffect(() => {
-    if (location.pathname === "/" || location.pathname.startsWith("/matches")) {
-      setActivePanel(location.pathname === "/" ? "matches" : "detail");
-    } else if (location.pathname === "/stats") {
-      setActivePanel("profile");
-    } else {
-      setActivePanel("detail");
-    }
-  }, [location.pathname]);
 
   // Prefetch all core data on login
   useEffect(() => {
@@ -120,32 +108,49 @@ export default function Layout() {
   );
   useSocketEvent("matchUpdate", onMatchUpdate);
 
-  // Swipe handling for mobile
+  const mobileSwipeRoutes = desktopTabs.map((tab) => tab.to);
+
+  // Swipe handling for mobile: move across primary routes instead of hidden side panels.
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.touches[0].clientX);
+    setTouchStartY(e.touches[0].clientY);
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStart === null) return;
     const touchEnd = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
     const diff = touchStart - touchEnd;
+    const diffY = (touchStartY ?? touchEndY) - touchEndY;
     const threshold = 50;
+    const target = e.target as HTMLElement | null;
 
-    if (Math.abs(diff) < threshold) return;
+    if (target?.closest("[data-prevent-route-swipe='true']")) {
+      setTouchStart(null);
+      setTouchStartY(null);
+      return;
+    }
 
-    // Swipe left (next panel) or right (prev panel)
-    const panels: Array<"matches" | "detail" | "profile"> = ["matches", "detail", "profile"];
-    const currentIndex = panels.indexOf(activePanel);
+    if (Math.abs(diff) < threshold || Math.abs(diff) <= Math.abs(diffY)) {
+      setTouchStart(null);
+      setTouchStartY(null);
+      return;
+    }
 
-    if (diff > 0 && currentIndex < panels.length - 1) {
-      // Swipe left
-      setActivePanel(panels[currentIndex + 1]);
+    const currentIndex = mobileSwipeRoutes.indexOf(location.pathname as typeof mobileSwipeRoutes[number]);
+    if (currentIndex === -1) {
+      setTouchStart(null);
+      return;
+    }
+
+    if (diff > 0 && currentIndex < mobileSwipeRoutes.length - 1) {
+      navigate(mobileSwipeRoutes[currentIndex + 1]);
     } else if (diff < 0 && currentIndex > 0) {
-      // Swipe right
-      setActivePanel(panels[currentIndex - 1]);
+      navigate(mobileSwipeRoutes[currentIndex - 1]);
     }
 
     setTouchStart(null);
+    setTouchStartY(null);
   };
 
   function handleLogout() {
@@ -241,37 +246,18 @@ export default function Layout() {
       </div>
       )}
 
-      {/* Mobile/Tablet 1-3 panel view */}
+      {/* Mobile/Tablet routed view */}
       {!isDesktopViewport && (
-      <div className="flex-1 min-h-0 overflow-hidden relative">
+      <div
+        className="flex-1 min-h-0 overflow-hidden relative"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div
-          ref={panelRef}
-          className="flex h-full transition-transform duration-300 ease-out"
-          style={{
-            transform: `translateX(calc(-${["matches", "detail", "profile"].indexOf(activePanel) * 100}%))`,
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
+          className="h-full overflow-auto p-4"
         >
-          {/* Matches Panel */}
-          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
-            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-              <MatchesPanel />
-            </div>
-          </div>
-
-          {/* Detail Panel */}
-          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
-            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-auto shadow-sm">
-              <Outlet />
-            </div>
-          </div>
-
-          {/* Profile Panel */}
-          <div className="w-full min-h-0 flex-shrink-0 overflow-hidden p-4">
-            <div className="h-full rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-              <ProfilePanel />
-            </div>
+          <div className="h-full rounded-xl border border-slate-200 bg-white overflow-auto shadow-sm">
+            <Outlet />
           </div>
         </div>
       </div>

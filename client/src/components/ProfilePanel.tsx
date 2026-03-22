@@ -44,7 +44,7 @@ export default function ProfilePanel({ className = "" }: ProfilePanelProps) {
             <p className="text-[10px] text-slate-400 mt-1">Your winnings</p>
           </div>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <div className="hidden sm:block bg-slate-50 border border-slate-200 rounded-lg p-3">
             <p className="text-xs text-slate-500">Cash Bonus</p>
             <p className="text-lg font-bold text-sky-600 mt-1">₹ 10</p>
             <p className="text-[10px] text-slate-400 mt-1">Amount to Expire</p>

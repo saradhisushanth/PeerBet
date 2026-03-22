@@ -431,7 +431,7 @@ export default function MatchDetail() {
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </Link>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-rose-500 leading-none mb-0.5">Indian T20 · Match Detail</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.05em] text-rose-500 leading-none mb-0.5">Indian T20 · Match Detail</p>
               <h1 className="text-sm sm:text-base font-extrabold text-slate-900 truncate leading-tight">
                 {home.shortName} <span className="text-slate-400 font-normal">vs</span> {away.shortName}
               </h1>
