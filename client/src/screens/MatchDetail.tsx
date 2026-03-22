@@ -548,7 +548,7 @@ export default function MatchDetail() {
           <div className="flex gap-3 items-start bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
             <span className="shrink-0 text-base">⚠️</span>
             <div><p className="text-sm font-bold text-amber-700">You haven't placed a bet yet</p>
-              <p className="text-xs text-amber-600 mt-0.5">{consecutiveMissed === 0 ? "Missing matches reduces your balance (−💰50 from 2nd miss)." : `You've missed ${consecutiveMissed} match${consecutiveMissed !== 1 ? "es" : ""}. Another miss will reduce your balance.`}</p>
+              <p className="text-xs text-amber-600 mt-0.5">{consecutiveMissed === 0 ? "Missing matches reduces your balance (−50 from 2nd miss)." : `You've missed ${consecutiveMissed} match${consecutiveMissed !== 1 ? "es" : ""}. Another miss will reduce your balance.`}</p>
             </div>
           </div>
         )}
@@ -721,7 +721,7 @@ export default function MatchDetail() {
                         : board.onHome.map(p => (
                           <div key={p.userId} className={`text-[11px] px-2 py-1.5 rounded-lg font-medium truncate ${p.userId === user?.id ? "bg-rose-100 text-rose-700" : "bg-slate-50 text-slate-700"}`}>
                             <p className="font-semibold truncate">{p.username === user?.username ? "You" : p.username}</p>
-                            <p className="text-[10px] text-slate-400">💰 {formatCurrency(p.amount)}</p>
+                            <p className="text-[10px] text-slate-400"> {formatCurrency(p.amount)}</p>
                           </div>
                         ))
                       }
@@ -752,7 +752,7 @@ export default function MatchDetail() {
                         : board.onAway.map(p => (
                           <div key={p.userId} className={`text-[11px] px-2 py-1.5 rounded-lg font-medium truncate ${p.userId === user?.id ? "bg-rose-100 text-rose-700" : "bg-slate-50 text-slate-700"}`}>
                             <p className="font-semibold truncate text-right">{p.username === user?.username ? "You" : p.username}</p>
-                            <p className="text-[10px] text-slate-400 text-right">💰 {formatCurrency(p.amount)}</p>
+                            <p className="text-[10px] text-slate-400 text-right"> {formatCurrency(p.amount)}</p>
                           </div>
                         ))
                       }
