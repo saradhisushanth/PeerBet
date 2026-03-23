@@ -12,11 +12,13 @@ export interface AuthPayload {
 
 function handlePrismaError(err: unknown): never {
   if (err instanceof AuthError) throw err;
-  const isPrismaError =
+  const prisma =
     err &&
     typeof err === "object" &&
-    ("code" in err || (err as Error).name?.startsWith("Prisma"));
-  if (isPrismaError) {
+    (/^P\d{4}/.test(String((err as { code?: unknown }).code)) ||
+      (err as Error).name?.startsWith("Prisma"));
+  if (prisma) {
+    console.error("[DB ERROR]", err);
     throw new AuthError("Service temporarily unavailable. Please try again later.", 503);
   }
   throw err;

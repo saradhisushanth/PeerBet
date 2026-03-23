@@ -79,8 +79,16 @@ async function requestJson(
         await sleep(RETRY_BACKOFF_MS[Math.min(attempt, RETRY_BACKOFF_MS.length - 1)]!);
         continue;
       }
-      const error = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error((error as { error?: string }).error || `HTTP ${res.status}`);
+      const text = await res.text().catch(() => "");
+      let msg: string | undefined;
+      try {
+        const b = JSON.parse(text) as { error?: string; message?: string };
+        if (typeof b.error === "string") msg = b.error;
+        else if (typeof b.message === "string") msg = b.message;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg || text.trim().slice(0, 120) || `HTTP ${res.status}`);
     }
 
     return (await res.json()) as Record<string, unknown>;
