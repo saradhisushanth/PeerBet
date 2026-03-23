@@ -5,9 +5,9 @@ services:
     runtime: node
     buildCommand: |
       npm install
-      npx prisma generate
+      npm run prisma:generate
       cd server && npm install && npm run build
-      cd .. && npx prisma migrate deploy
+      cd .. && npm exec prisma migrate deploy
       cd client && npm install && npm run build
     startCommand: npx tsx server/src/index.ts
     envVars:

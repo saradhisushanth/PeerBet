@@ -17,8 +17,7 @@ ipl-betting-app/
 ├── client/          # React SPA (Vite dev on :5173)
 ├── server/          # Express API + Socket.io
 ├── shared/          # Shared TS (constants, types)
-├── prisma/          # schema.prisma + migrations
-├── prisma.config.ts # Prisma datasource URL (loads DATABASE_URL)
+├── prisma/          # schema.prisma (includes datasource url) + migrations
 └── .env             # Create from .env.example (not committed)
 ```
 
@@ -51,13 +50,15 @@ Edit **`.env`** and set at least:
 
 ### 3. Database
 
-Prisma reads **`DATABASE_URL`** from **`.env`** in this directory (via `prisma.config.ts`).
+Prisma **6.19.x** reads **`DATABASE_URL`** from **`prisma/schema.prisma`** (`url = env("DATABASE_URL")`) and **`.env`** in the repo root.
+
+Use **npm scripts** (or `npm exec prisma …`) so the CLI matches the installed version. Avoid bare **`npx prisma`**, which can pull **Prisma 7** and conflict with this schema.
 
 **Apply migrations** (creates tables on an empty database):
 
 ```bash
-npx prisma generate
-npx prisma migrate deploy
+npm run prisma:generate
+npm exec prisma migrate deploy
 ```
 
 **Optional — seed IPL teams/fixtures** (dev):
@@ -167,7 +168,7 @@ The server configures SSL automatically for Supabase/pooler hosts in `server/src
 |---------|----------------|
 | **`ECONNREFUSED` / proxy errors** in Vite | API running? **`PORT`** in `.env` matches the running server and Vite’s proxy (same file). |
 | **Prisma / DB errors on login** | **`DATABASE_URL`** correct? Supabase **pool** URI + current DB password? Project **restored** if paused? |
-| **`npx prisma` errors about `url` in schema** | Connection URL lives in **`prisma.config.ts`**; this repo’s `schema.prisma` datasource has **no** `url` field (current Prisma config style). |
+| **Render / CI: “url is missing” or Prisma validate fails** | Run Prisma from the **repo root** after `npm install`, using **`npm run prisma:generate`** / **`npm exec prisma migrate deploy`** (not `npx prisma`, which may use Prisma 7). This repo pins **Prisma 6.19.2** and keeps **`url = env("DATABASE_URL")`** in **`schema.prisma`**. |
 | **Port already in use** | Change **`PORT`** in `.env` or stop the other process: `lsof -i :3001` (macOS). |
 
 ---

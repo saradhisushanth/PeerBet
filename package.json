@@ -6,9 +6,9 @@
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "prisma:generate": "npx prisma generate",
-    "prisma:migrate": "npx prisma migrate dev",
-    "prisma:studio": "npx prisma studio",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
     "db:seed": "npx tsx server/src/seed.ts",
     "db:reset": "npx tsx server/src/reset.ts"
   },
@@ -17,11 +17,11 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "prisma": "^6.19.2",
+    "prisma": "6.19.2",
     "tsx": "^4.19.3"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.2",
+    "@prisma/client": "6.19.2",
     "dotenv": "^17.3.1"
   }
 }
