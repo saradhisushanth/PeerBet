@@ -12,12 +12,16 @@ import {
   INSURANCE_REFUND_PERCENT, TOSS_DEFAULT_MINUTES_BEFORE_MATCH,
 } from "@shared/constants";
 import PlayerBettingBoard from "../components/PlayerBettingBoard";
+import TeamLogoImg from "../components/TeamLogoImg";
 import ProfitBreakdown from "../components/ProfitBreakdown";
 import { formatCurrency } from "../utils/format";
 import { getTeamLogo, getTeamLogoVisualScale } from "../utils/teamLogos";
 import type { BetPlacedPayload, MatchUpdatePayload } from "@shared/types";
 
 const STAKE_STEP = 10;
+
+/** Card elevation for white panels (hero uses a stronger inline shadow). */
+const CARD_SHADOW_STATIC = "shadow-[0_8px_28px_-6px_rgba(15,23,42,0.1)]";
 
 /* ─── helpers ──────────────────────────────────────────────────────────── */
 
@@ -47,6 +51,49 @@ function formatBetLockCountdown(ms: number): string {
   if (m || h || d) parts.push(`${m}m`);
   parts.push(`${sec}s`);
   return parts.join(" ");
+}
+
+/**
+ * Pool cap vs balance cap — same comparison as server (which raw ceiling is tighter).
+ * poolCap = floor(present pool) when pool > 0, else MAX_STAKE; balanceCap = wallet headroom for stake.
+ */
+function describeStakeOverCap(opts: {
+  triedAmount: number;
+  effMax: number;
+  poolCap: number;
+  balanceCap: number;
+  insured: boolean;
+}): string {
+  const { triedAmount, effMax, poolCap, balanceCap, insured } = opts;
+  const poolLim = Math.min(poolCap, MAX_STAKE);
+  const tried = formatCurrency(triedAmount);
+  const cap = formatCurrency(effMax);
+  if (poolLim < balanceCap) {
+    return `Pool limit: ${tried} is above what this match allows. Max you can stake now is ${cap}. Your stake can’t exceed the sum of other players’ stakes (your current stake is excluded). Lower your stake or wait for more pool.`;
+  }
+  if (balanceCap < poolLim) {
+    return `Balance limit: ${tried} is too high. Max stake for you is ${cap} with your current wallet${insured ? " (insurance fee reserved)" : ""}.`;
+  }
+  return `Stake can’t exceed ${cap}. You tried ${tried} (pool and balance caps meet at this amount).`;
+}
+
+function flashStakeOverCapHint(opts: {
+  effMax: number;
+  poolCap: number;
+  balanceCap: number;
+  othersStakeExclYours?: number;
+  fullMatchPoolTotal?: number;
+}): string {
+  const { effMax, poolCap, balanceCap, othersStakeExclYours = 0, fullMatchPoolTotal = 0 } = opts;
+  const poolLim = Math.min(poolCap, MAX_STAKE);
+  const cap = formatCurrency(effMax);
+  if (poolLim < balanceCap) {
+    return `Max ${cap} — capped by participating players’ total stake (yours excluded). Others’ total ${formatCurrency(othersStakeExclYours)} · full match pool ${formatCurrency(fullMatchPoolTotal)}.`;
+  }
+  if (balanceCap < poolLim) {
+    return `Max ${cap} — wallet headroom. Top up or lower insurance to raise stake.`;
+  }
+  return `Max stake is ${cap}.`;
 }
 
 interface MatchSummary {
@@ -93,8 +140,8 @@ function TeamPickCard({
         relative flex ${isRight ? "flex-row-reverse" : "flex-row"} items-center gap-4
         w-full px-5 py-5 rounded-2xl border-2 transition-all duration-200 text-${isRight ? "right" : "left"}
         ${isSelected
-          ? `border-transparent ring-2 ${a.ring} ${a.bg} shadow-lg`
-          : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-md shadow-sm"
+          ? `border-transparent ring-2 ${a.ring} ${a.bg} shadow-[0_14px_40px_-10px_rgba(15,23,42,0.2)]`
+          : `border-slate-100 bg-white shadow-[0_6px_22px_-6px_rgba(15,23,42,0.09)] hover:border-slate-200 hover:shadow-[0_14px_36px_-10px_rgba(15,23,42,0.14)]`
         }
         ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer active:scale-[0.98]"}
       `}
@@ -105,9 +152,19 @@ function TeamPickCard({
       )}
 
       {/* Logo */}
-      <div className={`shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center p-2 ${isSelected ? "bg-white/80 shadow-sm" : "bg-slate-50 border border-slate-100"}`}>
+      <div className={`flex shrink-0 h-16 w-16 items-center justify-center rounded-2xl p-2 sm:h-20 sm:w-20 ${isSelected ? "bg-white/90 shadow-[0_4px_16px_-4px_rgba(15,23,42,0.12)]" : "border border-slate-100 bg-slate-50"}`}>
         {logo
-          ? <img src={logo} alt={team.name} className="w-full h-full object-contain" style={{ transform: `scale(${logoScale})` }} />
+          ? (
+            <TeamLogoImg
+              src={logo}
+              alt={team.name}
+              priority
+              width={80}
+              height={80}
+              className="w-full h-full object-contain"
+              style={{ transform: `scale(${logoScale})` }}
+            />
+          )
           : <span className="text-lg font-extrabold text-slate-700">{team.shortName}</span>
         }
       </div>
@@ -136,7 +193,7 @@ function TeamPickCard({
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const { selectedMatch, setSelectedMatch, getMatchDetailCache, setMatchDetailCache } = useMatchStore();
-  const { user, setBalance, updateUser } = useAuthStore();
+  const { user, setBalance, updateUser, setBalanceDisplayOffset } = useAuthStore();
   const { addBet } = useBetStore();
 
   const [stake, setStake] = useState(Math.max(MIN_STAKE, 300));
@@ -165,6 +222,9 @@ export default function MatchDetail() {
   }
 
   const [insured, setInsured] = useState(false);
+  const [insuranceDialog, setInsuranceDialog] = useState<{ open: boolean; want: boolean }>({ open: false, want: false });
+  /** True after user confirms insurance dialog — next Lock must call API (don’t use `insured !== myBetInsured`; that fires before checkbox syncs from board and breaks pool checks). */
+  const pendingInsuranceSaveRef = useRef(false);
   const [placing, setPlacing] = useState(false);
   const [settling, setSettling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +255,17 @@ export default function MatchDetail() {
     if (!board || !user) return false;
     return board.onHome.find(p => p.userId === user.id)?.insured ?? board.onAway.find(p => p.userId === user.id)?.insured ?? false;
   }, [board, user?.id]);
+
+  /**
+   * While `placing`, board is optimistic — keep last server-true stake + insured for pool cap and balance math.
+   */
+  const committedBetCapsRef = useRef<{ stake: number; insured: boolean }>({ stake: 0, insured: false });
+  useEffect(() => {
+    if (!placing) committedBetCapsRef.current = { stake: myBetAmount, insured: myBetInsured };
+  }, [placing, myBetAmount, myBetInsured]);
+  const committedStake = placing ? committedBetCapsRef.current.stake : myBetAmount;
+  const committedInsured = placing ? committedBetCapsRef.current.insured : myBetInsured;
+  const myStakeExclForPoolCap = committedStake;
 
   const matchDetailLoadGenRef = useRef(0);
   const summaryFetchSeqRef = useRef(0);
@@ -242,12 +313,44 @@ export default function MatchDetail() {
   }, [id, setSelectedMatch, setMatchDetailCache, getMatchDetailCache, updateUser]);
 
   useEffect(() => {
+    setInsuranceDialog({ open: false, want: false });
+    pendingInsuranceSaveRef.current = false;
+  }, [id]);
+
+  useEffect(() => {
     if (!selectedMatch || selectedMatch.status !== "UPCOMING") return;
     const startMs = new Date(selectedMatch.startTime).getTime();
     const closesAt = selectedMatch.tossTime ? new Date(selectedMatch.tossTime).getTime() : startMs - TOSS_DEFAULT_MINUTES_BEFORE_MATCH * 60_000;
     const tick = () => setCountdown(Math.max(0, closesAt - Date.now()));
     tick(); const t = setInterval(tick, 1000); return () => clearInterval(t);
   }, [selectedMatch]);
+
+  /** Header balance preview: only after user confirms in the insurance dialog (`insured` updates). Not while dialog is open. */
+  useEffect(() => {
+    if (!user?.id || !id) {
+      setBalanceDisplayOffset(0);
+      return;
+    }
+    if (!selectedMatch || selectedMatch.id !== id || selectedMatch.status !== "UPCOMING" || countdown <= 0) {
+      setBalanceDisplayOffset(0);
+      return;
+    }
+    const ins = insured;
+    let delta = 0;
+    if (ins && !myBetInsured) delta = -INSURANCE_COST;
+    else if (!ins && myBetInsured) delta = INSURANCE_COST;
+    setBalanceDisplayOffset(delta);
+    return () => setBalanceDisplayOffset(0);
+  }, [
+    user?.id,
+    id,
+    selectedMatch?.id,
+    selectedMatch?.status,
+    countdown,
+    insured,
+    myBetInsured,
+    setBalanceDisplayOffset,
+  ]);
 
   const hasRefetchedAtZeroRef = useRef(false);
   useEffect(() => { if (id) hasRefetchedAtZeroRef.current = false; }, [id]);
@@ -312,7 +415,19 @@ export default function MatchDetail() {
     const effMax = Math.min(Math.max(MIN_STAKE, Math.min(poolCap, MAX_STAKE)), Math.max(0, balBefore - (insured ? INSURANCE_COST : 0)));
     if (amount < MIN_STAKE) { setError(`Min stake: ${formatCurrency(MIN_STAKE)}`); return false; }
     if (amount > MAX_STAKE) { setError(`Max stake: ${formatCurrency(MAX_STAKE)}`); return false; }
-    if (amount > effMax) { setError(`Max: ${formatCurrency(effMax)}`); return false; }
+    if (amount > effMax) {
+      const balanceCap = Math.max(0, balBefore - (insured ? INSURANCE_COST : 0));
+      setError(
+        describeStakeOverCap({
+          triedAmount: amount,
+          effMax,
+          poolCap,
+          balanceCap,
+          insured,
+        }),
+      );
+      return false;
+    }
     const prev = board;
     if (board && user) {
       const me = { userId: user.id, username: user.username, amount, insured };
@@ -329,6 +444,7 @@ export default function MatchDetail() {
       setStakeProtected(amount, 2000); setStakeLocked(true);
       updateUser({ balance: wallet.balance, prizePoolContribution: wallet.prizePoolContribution, consecutiveMissedMatches: wallet.consecutiveMissedMatches });
       void Promise.all([fetchBoard(), fetchSummary()]);
+      pendingInsuranceSaveRef.current = false;
       return true;
     } catch (err) { setBoard(prev); setError(err instanceof Error ? err.message : "Failed"); return false; }
     finally { setPlacing(false); }
@@ -336,6 +452,7 @@ export default function MatchDetail() {
 
   async function cancelBet() {
     if (!user || !id) return;
+    pendingInsuranceSaveRef.current = false;
     setStakeProtected(stake, 3000);
     const prev = board;
     if (board) { const wo = (l: typeof board.onHome) => l.filter(p => p.userId !== user.id); setBoard({ ...board, onHome: wo(board.onHome), onAway: wo(board.onAway), undecided: board.undecided.some(p => p.userId === user.id) ? board.undecided : [...board.undecided, { userId: user.id, username: user.username }] }); }
@@ -366,8 +483,14 @@ export default function MatchDetail() {
     catch (err) { setError(err instanceof Error ? err.message : "Failed"); } finally { setSettling(false); }
   }
 
-  const balanceAtMatchEntry = (user?.balance ?? 0) + myBetAmount + (myBetInsured ? INSURANCE_COST : 0);
-  useEffect(() => { if (board && user && myBetAmount > 0) setInsured(myBetInsured); }, [board, user?.id, myBetAmount, myBetInsured]);
+  /** Coins available to cover a new/replaced bet: wallet + pending stake + insurance fee refund if current bet is insured. */
+  const balanceAtMatchEntry =
+    (user?.balance ?? 0) + committedStake + (committedInsured ? INSURANCE_COST : 0);
+  /** Sync checkbox from server/board only when saved insurance (or stake row) changes — not on every `board` identity change, so a pending dialog choice isn’t wiped. */
+  useEffect(() => {
+    if (!user || myBetAmount <= 0) return;
+    setInsured(myBetInsured);
+  }, [user?.id, myBetAmount, myBetInsured]);
 
   /* ── loading state ── */
   if (!selectedMatch) {
@@ -388,12 +511,52 @@ export default function MatchDetail() {
   const isAdmin = user?.username === ADMIN_USERNAME;
   const canSettle = !selectedMatch.winner && (isUpcoming || selectedMatch.status === "LIVE");
   const totalPool = summary?.totalPool ?? 0;
-  const presentPool = Number(totalPool) - myBetAmount;
+  const presentPool = Number(totalPool) - myStakeExclForPoolCap;
+  /** Sum of other players’ stakes (same basis as pool cap); full pool = everyone including you. */
+  const othersStakeExclYours = Math.max(0, Math.floor(Number(presentPool)));
   const participantCount = board ? board.onHome.length + board.onAway.length : 0;
   const poolCap = presentPool > 0 ? Math.floor(presentPool) : MAX_STAKE;
   const maxStakeFromPool = Math.max(MIN_STAKE, Math.min(poolCap, MAX_STAKE));
-  const maxStakeFromBalance = Math.max(0, ((user?.balance ?? 0) + myBetAmount) - (insured ? INSURANCE_COST : 0));
+  /** Same as server: availableBalance − insurance fee when the new bet is insured. */
+  const maxStakeFromBalance = Math.max(0, balanceAtMatchEntry - (insured ? INSURANCE_COST : 0));
   const maxStake = Math.min(maxStakeFromPool, maxStakeFromBalance);
+  /** True when pool rule is stricter than wallet (so “max” is not just balance). */
+  const stakeCappedByPool =
+    bettingOpen && maxStake >= MIN_STAKE && maxStakeFromPool < maxStakeFromBalance;
+  /** Max stake if the new bet were uninsured (same pool cap, full balanceAtMatchEntry for wallet). */
+  const maxStakeIfInsuranceOff = Math.min(maxStakeFromPool, Math.max(0, balanceAtMatchEntry));
+  /** Unchecking insurance would raise the allowed stake (fee no longer reserved). */
+  const stakeCappedByInsuranceFee =
+    bettingOpen && insured && maxStakeIfInsuranceOff > maxStake;
+
+  function applyInsuranceStakeClamp(nextInsured: boolean) {
+    const nextMax = Math.min(maxStakeFromPool, Math.max(0, balanceAtMatchEntry - (nextInsured ? INSURANCE_COST : 0)));
+    const raw = parseInt(stakeInputValue, 10);
+    const effective = Number.isFinite(raw) && raw > 0 ? raw : stake;
+    const capped = Math.min(effective, nextMax);
+    const nextStake = nextMax < MIN_STAKE ? Math.max(0, capped) : Math.max(MIN_STAKE, capped);
+    setStake(nextStake);
+    setStakeInputValue(String(nextStake));
+  }
+
+  function onInsuranceCheckboxChange(want: boolean) {
+    if (want === insured) return;
+    setInsuranceDialog({ open: true, want });
+  }
+
+  function confirmInsuranceDialog() {
+    const want = insuranceDialog.want;
+    setInsuranceDialog({ open: false, want: false });
+    setInsured(want);
+    applyInsuranceStakeClamp(want);
+    setStakeLocked(false);
+    pendingInsuranceSaveRef.current = true;
+  }
+
+  function cancelInsuranceDialog() {
+    setInsuranceDialog({ open: false, want: false });
+  }
+
   const momentumHome = summary?.momentum?.homePercent ?? 50;
   const momentumAway = summary?.momentum?.awayPercent ?? 50;
   const recentBets = summary?.recentBets ?? [];
@@ -407,7 +570,17 @@ export default function MatchDetail() {
   function clampStake(): number {
     const n = Math.floor(Number(stakeInputValue));
     if (!Number.isNaN(n) && n < MIN_STAKE) flashStakeWarning(`Min stake is ${formatCurrency(MIN_STAKE)}.`);
-    else if (!Number.isNaN(n) && n > maxStake) flashStakeWarning(`Max stake is ${formatCurrency(maxStake)}.`);
+    else if (!Number.isNaN(n) && n > maxStake) {
+      flashStakeWarning(
+        flashStakeOverCapHint({
+          effMax: maxStake,
+          poolCap,
+          balanceCap: maxStakeFromBalance,
+          othersStakeExclYours,
+          fullMatchPoolTotal: totalPool,
+        }),
+      );
+    }
     const final = Math.floor(Number.isNaN(n) || n < MIN_STAKE ? MIN_STAKE : Math.min(n, maxStake));
     setStake(final); setStakeInputValue(String(final)); setStakeProtected(final);
     return final;
@@ -417,6 +590,7 @@ export default function MatchDetail() {
     UPCOMING:  { label: "Upcoming",  cls: "text-rose-600 bg-rose-50 border-rose-200" },
     LIVE:      { label: "Live",      cls: "text-red-600 bg-red-50 border-red-200"     },
     COMPLETED: { label: "Completed", cls: "text-slate-600 bg-slate-100 border-slate-200" },
+    CANCELLED: { label: "Cancelled", cls: "text-amber-700 bg-amber-50 border-amber-200" },
   }[selectedMatch.status] ?? { label: selectedMatch.status, cls: "text-slate-500 bg-slate-50 border-slate-200" };
 
   /* ─────────────────── RENDER ─────────────────── */
@@ -424,7 +598,7 @@ export default function MatchDetail() {
     <div className="min-h-screen bg-[#F8F9FC]">
 
       {/* ══ STICKY HEADER ══════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-100 shadow-sm">
+      <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/95 backdrop-blur-md shadow-[0_6px_28px_-4px_rgba(15,23,42,0.14)] supports-[backdrop-filter]:bg-white/90">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 py-3">
             <Link to="/" className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
@@ -465,9 +639,11 @@ export default function MatchDetail() {
         </div>
       </header>
 
-      {/* ══ MATCH HERO ═════════════════════════════════════════════════════ */}
-      <div className="bg-white border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* ══ MATCH HERO (elevated card — main visual anchor under sticky bar) ══ */}
+      <div className="max-w-7xl mx-auto px-4 pt-3 sm:px-6 sm:pt-4 lg:px-8">
+        <div
+          className="rounded-2xl border border-slate-100/90 bg-white px-4 py-5 shadow-[0_14px_44px_-10px_rgba(15,23,42,0.16)] sm:px-6 sm:py-6 sm:shadow-[0_18px_50px_-12px_rgba(15,23,42,0.18)] lg:px-8"
+        >
           {/* Teams row */}
           <div className="flex items-center justify-between gap-4">
 
@@ -475,7 +651,17 @@ export default function MatchDetail() {
             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
               <div className={`w-11 h-11 sm:w-16 sm:h-16 shrink-0 rounded-2xl flex items-center justify-center p-2 flex-shrink-0 ${accent(home.shortName).bg} border border-slate-100`}>
                 {getTeamLogo(home.shortName, home.name)
-                  ? <img src={getTeamLogo(home.shortName, home.name)!} alt={home.name} className="w-full h-full object-contain" style={{ transform: `scale(${getTeamLogoVisualScale(home.shortName, home.name)})` }} />
+                  ? (
+                    <TeamLogoImg
+                      src={getTeamLogo(home.shortName, home.name)!}
+                      alt={home.name}
+                      priority
+                      width={80}
+                      height={80}
+                      className="w-full h-full object-contain"
+                      style={{ transform: `scale(${getTeamLogoVisualScale(home.shortName, home.name)})` }}
+                    />
+                  )
                   : <span className="font-extrabold text-slate-800 text-sm">{home.shortName}</span>}
               </div>
               <div className="min-w-0">
@@ -512,7 +698,17 @@ export default function MatchDetail() {
             <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 flex-row-reverse">
               <div className={`w-11 h-11 sm:w-16 sm:h-16 shrink-0 rounded-2xl flex items-center justify-center p-2 flex-shrink-0 ${accent(away.shortName).bg} border border-slate-100`}>
                 {getTeamLogo(away.shortName, away.name)
-                  ? <img src={getTeamLogo(away.shortName, away.name)!} alt={away.name} className="w-full h-full object-contain" style={{ transform: `scale(${getTeamLogoVisualScale(away.shortName, away.name)})` }} />
+                  ? (
+                    <TeamLogoImg
+                      src={getTeamLogo(away.shortName, away.name)!}
+                      alt={away.name}
+                      priority
+                      width={80}
+                      height={80}
+                      className="w-full h-full object-contain"
+                      style={{ transform: `scale(${getTeamLogoVisualScale(away.shortName, away.name)})` }}
+                    />
+                  )
                   : <span className="font-extrabold text-slate-800 text-sm">{away.shortName}</span>}
               </div>
               <div className="min-w-0 text-right">
@@ -527,7 +723,7 @@ export default function MatchDetail() {
           </div>
 
           {/* Momentum bar */}
-          <div className="mt-4 h-2 rounded-full overflow-hidden flex bg-slate-100">
+          <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100 shadow-inner">
             <div className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`} style={{ width: `${momentumHome}%` }} />
             <div className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`} style={{ width: `${momentumAway}%` }} />
           </div>
@@ -537,7 +733,7 @@ export default function MatchDetail() {
       {/* ══ ALERTS ══════════════════════════════════════════════════════════ */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-2">
         {bettingOpen && countdown <= 60_000 && (
-          <div className="flex gap-3 items-start bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+          <div className="flex gap-3 items-start rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-[0_6px_24px_-6px_rgba(245,158,11,0.18)]">
             <span className="shrink-0 text-base">⏱</span>
             <div><p className="text-sm font-bold text-amber-700">Betting locks soon!</p>
               <p className="text-xs text-amber-600 mt-0.5">{isSoleBettor ? "Solo rules apply — win bonus or 50% bye refund." : participantCount <= 2 ? "Lower-ranked player will be auto-moved to balance the match." : "Last 2 players by rank will be auto-assigned to the other side."}</p>
@@ -545,7 +741,7 @@ export default function MatchDetail() {
           </div>
         )}
         {isUserUndecided && user && (
-          <div className="flex gap-3 items-start bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+          <div className="flex gap-3 items-start rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-[0_6px_24px_-6px_rgba(245,158,11,0.18)]">
             <span className="shrink-0 text-base">⚠️</span>
             <div><p className="text-sm font-bold text-amber-700">You haven't placed a bet yet</p>
               <p className="text-xs text-amber-600 mt-0.5">{consecutiveMissed === 0 ? "Missing matches reduces your balance (−50 from 2nd miss)." : `You've missed ${consecutiveMissed} match${consecutiveMissed !== 1 ? "es" : ""}. Another miss will reduce your balance.`}</p>
@@ -553,13 +749,13 @@ export default function MatchDetail() {
           </div>
         )}
         {success && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-[0_6px_24px_-6px_rgba(16,185,129,0.15)]">
             <span className="text-emerald-500">✓</span><p className="text-sm font-semibold text-emerald-700 flex-1">{success}</p>
             <button onClick={() => setSuccess(null)} className="text-emerald-300 hover:text-emerald-500 text-sm">✕</button>
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 shadow-[0_6px_24px_-6px_rgba(239,68,68,0.14)]">
             <span className="text-red-400">!</span><p className="text-sm font-semibold text-red-600 flex-1">{error}</p>
             <button onClick={() => setError(null)} className="text-red-300 hover:text-red-500 text-sm">✕</button>
           </div>
@@ -571,9 +767,9 @@ export default function MatchDetail() {
 
         {/* ── CHOOSE YOUR SIDE — full width, prominent ── */}
         {bettingOpen && board && (
-          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white ${CARD_SHADOW_STATIC}`}>
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Choose Your Side</p>
                 <p className="text-sm font-bold text-slate-800 mt-0.5">Which team wins tonight?</p>
@@ -633,8 +829,8 @@ export default function MatchDetail() {
           <aside className="lg:col-span-3 space-y-4">
 
             {/* Pool Stats — horizontal pills on mobile, vertical list on desktop */}
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100">
+            <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white ${CARD_SHADOW_STATIC}`}>
+              <div className="border-b border-slate-100 px-5 py-3">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Pool Stats</p>
               </div>
               {/* Mobile: horizontal pill row */}
@@ -670,7 +866,7 @@ export default function MatchDetail() {
             </div>
 
             {/* Activity — always visible, scrollable */}
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden flex flex-col" style={{ height: "200px" }}>
+            <div className={`flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white ${CARD_SHADOW_STATIC}`} style={{ height: "200px" }}>
               <div className="px-5 py-3 border-b border-slate-100 shrink-0">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Activity</p>
               </div>
@@ -703,82 +899,60 @@ export default function MatchDetail() {
                 winnerTeamId={selectedMatch.winner?.id ?? null}
               />
             ) : (
-              <div className="bg-white border border-slate-100 rounded-2xl p-10 flex items-center justify-center text-slate-400 text-sm shadow-sm animate-pulse">Loading board…</div>
+              <div className={`flex animate-pulse items-center justify-center rounded-2xl border border-slate-100 bg-white p-10 text-sm text-slate-400 ${CARD_SHADOW_STATIC}`}>Loading board…</div>
             )}
           </section>
 
-          {/* Mobile-only: compact support columns */}
-          <section className="lg:hidden">
-            {board && (
-              <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-                <div className="grid grid-cols-3 divide-x divide-slate-100">
-                  {/* Home support */}
-                  <div className="p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-2">{board.homeTeam.shortName}</p>
-                    <div className="space-y-1.5">
-                      {board.onHome.length === 0
-                        ? <p className="text-[11px] text-slate-300 italic">No bets</p>
-                        : board.onHome.map(p => (
-                          <div key={p.userId} className={`text-[11px] px-2 py-1.5 rounded-lg font-medium truncate ${p.userId === user?.id ? "bg-rose-100 text-rose-700" : "bg-slate-50 text-slate-700"}`}>
-                            <p className="font-semibold truncate">{p.username === user?.username ? "You" : p.username}</p>
-                            <p className="text-[10px] text-slate-400"> {formatCurrency(p.amount)}</p>
-                          </div>
-                        ))
-                      }
-                    </div>
-                  </div>
-
-                  {/* Undecided */}
-                  <div className="p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-2 text-center">Undecided</p>
-                    <div className="space-y-1.5">
-                      {board.undecided.length === 0
-                        ? <p className="text-[11px] text-slate-300 italic text-center">—</p>
-                        : board.undecided.map(p => (
-                          <div key={p.userId} className={`text-[11px] px-2 py-1.5 rounded-lg text-center truncate ${p.userId === user?.id ? "bg-amber-50 text-amber-700 font-bold" : "bg-slate-50 text-slate-600"}`}>
-                            {p.username === user?.username ? "You" : p.username}
-                          </div>
-                        ))
-                      }
-                    </div>
-                  </div>
-
-                  {/* Away support */}
-                  <div className="p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-2 text-right">{board.awayTeam.shortName}</p>
-                    <div className="space-y-1.5">
-                      {board.onAway.length === 0
-                        ? <p className="text-[11px] text-slate-300 italic text-right">No bets</p>
-                        : board.onAway.map(p => (
-                          <div key={p.userId} className={`text-[11px] px-2 py-1.5 rounded-lg font-medium truncate ${p.userId === user?.id ? "bg-rose-100 text-rose-700" : "bg-slate-50 text-slate-700"}`}>
-                            <p className="font-semibold truncate text-right">{p.username === user?.username ? "You" : p.username}</p>
-                            <p className="text-[10px] text-slate-400 text-right"> {formatCurrency(p.amount)}</p>
-                          </div>
-                        ))
-                      }
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile momentum bar */}
-                <div className="px-3 pb-3">
+          {/* Mobile: same DnD board as desktop (was read-only grid — drag never existed here) */}
+          <section className="lg:hidden space-y-3">
+            {board ? (
+              <>
+                <PlayerBettingBoard
+                  board={board}
+                  currentUserId={user?.id ?? null}
+                  stake={stake}
+                  onPlaceBet={async (teamId, amount) => {
+                    await placeBet(teamId, amount);
+                  }}
+                  onCancelBet={cancelBet}
+                  placing={placing}
+                  isUpcoming={isUpcoming}
+                  bettingOpen={bettingOpen}
+                  canAffordBet={maxStake >= MIN_STAKE}
+                  winnerTeamId={selectedMatch.winner?.id ?? null}
+                />
+                <div className={`rounded-2xl border border-slate-100 bg-white px-3 py-3 ${CARD_SHADOW_STATIC}`}>
                   <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                    <span>{board.homeTeam.shortName} {momentumHome}%</span>
-                    <span>{momentumAway}% {board.awayTeam.shortName}</span>
+                    <span>
+                      {board.homeTeam.shortName} {momentumHome}%
+                    </span>
+                    <span>
+                      {momentumAway}% {board.awayTeam.shortName}
+                    </span>
                   </div>
-                  <div className="h-2 rounded-full overflow-hidden flex bg-slate-100">
-                    <div className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`} style={{ width: `${momentumHome}%` }} />
-                    <div className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`} style={{ width: `${momentumAway}%` }} />
+                  <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`}
+                      style={{ width: `${momentumHome}%` }}
+                    />
+                    <div
+                      className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`}
+                      style={{ width: `${momentumAway}%` }}
+                    />
                   </div>
                 </div>
+              </>
+            ) : (
+              <div className={`flex animate-pulse items-center justify-center rounded-2xl border border-slate-100 bg-white p-10 text-sm text-slate-400 ${CARD_SHADOW_STATIC}`}>
+                Loading board…
               </div>
             )}
           </section>
 
           {/* ── RIGHT: Results + Admin ── */}
           <aside className="lg:col-span-3 space-y-4">
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100">
+            <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white ${CARD_SHADOW_STATIC}`}>
+              <div className="border-b border-slate-100 px-5 py-4">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Match Results</p>
               </div>
               <div className="divide-y divide-slate-50">
@@ -809,7 +983,7 @@ export default function MatchDetail() {
 
           {/* Admin panel */}
           {isAdmin && (
-            <div className="bg-white border border-amber-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-[0_10px_32px_-8px_rgba(245,158,11,0.2)]">
               <div className="px-5 py-3 border-b border-amber-100 flex items-center gap-2">
                 <span>🔐</span><p className="text-[11px] uppercase tracking-[0.15em] text-amber-500 font-semibold">Admin Controls</p>
               </div>
@@ -828,7 +1002,7 @@ export default function MatchDetail() {
                   <p className="text-xs text-slate-400 font-medium">Toss time (betting closes)</p>
                   <form onSubmit={handleSaveTimes} className="space-y-2">
                     <input type="datetime-local" value={tossTimeInput} onChange={e => setTossTimeInput(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300"/>
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-300 [color-scheme:light]"/>
                     {timesError && <p className="text-xs text-red-400">{timesError}</p>}
                     <button type="submit" disabled={timesSaving} className="w-full py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">{timesSaving ? "Saving…" : "Save Toss Time"}</button>
                   </form>
@@ -902,12 +1076,32 @@ export default function MatchDetail() {
                     onFocus={() => { stakeInputFocusedRef.current = true; }}
                     onBlur={() => { stakeInputFocusedRef.current = false; clampStake(); }}
                     onChange={e => setStakeInputValue(toIntegerStake(e.target.value))}
-                    className={`w-full min-w-0 text-center font-extrabold border rounded-xl px-2 py-2 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-2 focus:ring-rose-300 ${stakeLocked ? "bg-amber-50 border-amber-300 text-amber-700" : "bg-white border-slate-200 text-slate-900"}`}/>
+                    className={`w-full min-w-0 text-center font-extrabold border rounded-xl px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-200 ${stakeLocked ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-white border-slate-200"}`}/>
                   <button disabled={placing || maxStake < MIN_STAKE || stakeLocked}
-                    onClick={() => { const c=parseInt(stakeInputValue,10)||stake, n=Math.min(c+STAKE_STEP,maxStake); if(c+STAKE_STEP>maxStake){flashStakeWarning(`Max ${formatCurrency(maxStake)}`);return;} setStake(n);setStakeInputValue(String(n));setStakeProtected(n); }}
+                    onClick={() => { const c=parseInt(stakeInputValue,10)||stake, n=Math.min(c+STAKE_STEP,maxStake); if(c+STAKE_STEP>maxStake){flashStakeWarning(flashStakeOverCapHint({ effMax: maxStake, poolCap, balanceCap: maxStakeFromBalance, othersStakeExclYours, fullMatchPoolTotal: totalPool }));return;} setStake(n);setStakeInputValue(String(n));setStakeProtected(n); }}
                     className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-40 transition-colors touch-manipulation">+10</button>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">Min {formatCurrency(MIN_STAKE)} · Max {formatCurrency(maxStake)}</p>
+                {stakeCappedByPool && (
+                  <p className="mt-1 text-[10px] font-medium leading-snug text-amber-800">
+                    Max is capped by <span className="font-bold">participating players’ total stake</span> (yours excluded).
+                    {" "}
+                    <span className="tabular-nums">Others’ total {formatCurrency(othersStakeExclYours)}</span>
+                    <span className="text-slate-500"> · </span>
+                    <span className="tabular-nums">full pool {formatCurrency(totalPool)}</span>.
+                  </p>
+                )}
+                {insured && bettingOpen && (
+                  stakeCappedByInsuranceFee ? (
+                    <p className="mt-1 text-[10px] font-medium text-amber-800 leading-snug">
+                      Insurance reserves {formatCurrency(INSURANCE_COST)}. Uncheck it to raise max stake to {formatCurrency(maxStakeIfInsuranceOff)} (if pool allows).
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-slate-500 leading-snug">
+                      Max stake includes the {formatCurrency(INSURANCE_COST)} insurance fee.
+                    </p>
+                  )
+                )}
               </div>
 
               {/* Lock button */}
@@ -917,7 +1111,12 @@ export default function MatchDetail() {
                   if (stakeLocked) { setStakeLocked(false); const v = Math.max(MIN_STAKE, Math.floor(myBetAmount > 0 ? myBetAmount : lastBoardAmountRef.current ?? stake)); setStake(v); setStakeInputValue(String(v)); return; }
                   stakeInputRef.current?.blur(); stakeInputFocusedRef.current = false;
                   const amt = clampStake();
-                  if (userBetTeamId && myBetAmount > 0) { if (amt !== myBetAmount) { setStakeLocked(true); const ok = await placeBet(userBetTeamId, amt); if (!ok) setStakeLocked(false); } else setStakeLocked(true); return; }
+                  if (userBetTeamId && myBetAmount > 0) {
+                    const mustSync = amt !== myBetAmount || pendingInsuranceSaveRef.current;
+                    if (mustSync) { setStakeLocked(true); const ok = await placeBet(userBetTeamId, amt); if (!ok) setStakeLocked(false); }
+                    else setStakeLocked(true);
+                    return;
+                  }
                   setStakeLocked(true);
                 }}
                 className={`w-full sm:w-auto justify-center sm:justify-start shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors touch-manipulation ${stakeLocked ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-slate-900 text-white hover:bg-slate-700"}`}>
@@ -926,8 +1125,8 @@ export default function MatchDetail() {
             </div>
 
             {/* Insurance */}
-            <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
-              <input type="checkbox" checked={insured} onChange={e => setInsured(e.target.checked)} className="w-4 h-4 rounded accent-rose-600 border-slate-300"/>
+            <label className={`flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 ${bettingOpen && !placing ? "cursor-pointer" : "opacity-60 pointer-events-none"}`}>
+              <input type="checkbox" checked={insured} disabled={!bettingOpen || placing} onChange={e => onInsuranceCheckboxChange(e.target.checked)} className="w-4 h-4 rounded accent-rose-600 border-slate-300 disabled:opacity-50"/>
               <div className="flex-1">
                 <p className="text-xs font-bold text-slate-800">Insurance <span className="text-rose-600 font-extrabold">{formatCurrency(INSURANCE_COST)}</span></p>
                 <p className="text-[10px] text-slate-400">Get {INSURANCE_REFUND_PERCENT}% stake back if you lose</p>
@@ -990,12 +1189,32 @@ export default function MatchDetail() {
                     onFocus={() => { stakeInputFocusedRef.current = true; }}
                     onBlur={() => { stakeInputFocusedRef.current = false; clampStake(); }}
                     onChange={e => setStakeInputValue(toIntegerStake(e.target.value))}
-                    className={`w-full min-w-0 text-center font-extrabold border rounded-xl px-2 py-2 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-2 focus:ring-rose-300 ${stakeLocked ? "bg-amber-50 border-amber-300 text-amber-700" : "bg-white border-slate-200 text-slate-900"}`}/>
+                    className={`w-full min-w-0 text-center font-extrabold border rounded-xl px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:bg-slate-100 disabled:text-slate-600 disabled:border-slate-200 ${stakeLocked ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-white border-slate-200"}`}/>
                   <button disabled={placing || maxStake < MIN_STAKE || stakeLocked}
-                    onClick={() => { const c=parseInt(stakeInputValue,10)||stake, n=Math.min(c+STAKE_STEP,maxStake); if(c+STAKE_STEP>maxStake){flashStakeWarning(`Max ${formatCurrency(maxStake)}`);return;} setStake(n);setStakeInputValue(String(n));setStakeProtected(n); }}
+                    onClick={() => { const c=parseInt(stakeInputValue,10)||stake, n=Math.min(c+STAKE_STEP,maxStake); if(c+STAKE_STEP>maxStake){flashStakeWarning(flashStakeOverCapHint({ effMax: maxStake, poolCap, balanceCap: maxStakeFromBalance, othersStakeExclYours, fullMatchPoolTotal: totalPool }));return;} setStake(n);setStakeInputValue(String(n));setStakeProtected(n); }}
                     className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-40 transition-colors touch-manipulation">+10</button>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">Min {formatCurrency(MIN_STAKE)} · Max {formatCurrency(maxStake)}</p>
+                {stakeCappedByPool && (
+                  <p className="mt-1 text-[10px] font-medium leading-snug text-amber-800">
+                    Max is capped by <span className="font-bold">participating players’ total stake</span> (yours excluded).
+                    {" "}
+                    <span className="tabular-nums">Others’ total {formatCurrency(othersStakeExclYours)}</span>
+                    <span className="text-slate-500"> · </span>
+                    <span className="tabular-nums">full pool {formatCurrency(totalPool)}</span>.
+                  </p>
+                )}
+                {insured && bettingOpen && (
+                  stakeCappedByInsuranceFee ? (
+                    <p className="mt-1 text-[10px] font-medium text-amber-800 leading-snug">
+                      Insurance reserves {formatCurrency(INSURANCE_COST)}. Uncheck it to raise max stake to {formatCurrency(maxStakeIfInsuranceOff)} (if pool allows).
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-slate-500 leading-snug">
+                      Max stake includes the {formatCurrency(INSURANCE_COST)} insurance fee.
+                    </p>
+                  )
+                )}
               </div>
 
               {/* Lock button */}
@@ -1005,7 +1224,12 @@ export default function MatchDetail() {
                   if (stakeLocked) { setStakeLocked(false); const v = Math.max(MIN_STAKE, Math.floor(myBetAmount > 0 ? myBetAmount : lastBoardAmountRef.current ?? stake)); setStake(v); setStakeInputValue(String(v)); return; }
                   stakeInputRef.current?.blur(); stakeInputFocusedRef.current = false;
                   const amt = clampStake();
-                  if (userBetTeamId && myBetAmount > 0) { if (amt !== myBetAmount) { setStakeLocked(true); const ok = await placeBet(userBetTeamId, amt); if (!ok) setStakeLocked(false); } else setStakeLocked(true); return; }
+                  if (userBetTeamId && myBetAmount > 0) {
+                    const mustSync = amt !== myBetAmount || pendingInsuranceSaveRef.current;
+                    if (mustSync) { setStakeLocked(true); const ok = await placeBet(userBetTeamId, amt); if (!ok) setStakeLocked(false); }
+                    else setStakeLocked(true);
+                    return;
+                  }
                   setStakeLocked(true);
                 }}
                 className={`w-full sm:w-auto justify-center sm:justify-start shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors touch-manipulation ${stakeLocked ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-slate-900 text-white hover:bg-slate-700"}`}>
@@ -1014,8 +1238,8 @@ export default function MatchDetail() {
             </div>
 
             {/* Insurance */}
-            <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
-              <input type="checkbox" checked={insured} onChange={e => setInsured(e.target.checked)} className="w-4 h-4 rounded accent-rose-600 border-slate-300"/>
+            <label className={`flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 ${bettingOpen && !placing ? "cursor-pointer" : "opacity-60 pointer-events-none"}`}>
+              <input type="checkbox" checked={insured} disabled={!bettingOpen || placing} onChange={e => onInsuranceCheckboxChange(e.target.checked)} className="w-4 h-4 rounded accent-rose-600 border-slate-300 disabled:opacity-50"/>
               <div className="flex-1">
                 <p className="text-xs font-bold text-slate-800">Insurance <span className="text-rose-600 font-extrabold">{formatCurrency(INSURANCE_COST)}</span></p>
                 <p className="text-[10px] text-slate-400">Get {INSURANCE_REFUND_PERCENT}% stake back if you lose</p>
@@ -1030,6 +1254,64 @@ export default function MatchDetail() {
           </div>
         </div>
       ))}
+
+      {insuranceDialog.open && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50"
+          role="presentation"
+          onClick={cancelInsuranceDialog}
+          onKeyDown={(e) => e.key === "Escape" && cancelInsuranceDialog()}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="insurance-dialog-title"
+            className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 border border-slate-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 id="insurance-dialog-title" className="text-base font-extrabold text-slate-900 leading-snug">
+              {insuranceDialog.want ? "Add insurance to this bet?" : "Remove insurance from this bet?"}
+            </h2>
+            <div className="mt-3 space-y-2 text-sm text-slate-600 leading-relaxed">
+              {insuranceDialog.want ? (
+                <p>
+                  Insurance costs <span className="font-bold text-slate-900">{formatCurrency(INSURANCE_COST)}</span> once, when you save.
+                  If you lose, you get <span className="font-semibold text-slate-800">{INSURANCE_REFUND_PERCENT}%</span> of your stake back.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    You’ll get <span className="font-bold text-slate-900">{formatCurrency(INSURANCE_COST)}</span> credited back when you save — but you won’t have loss protection on this bet anymore.
+                  </p>
+                  <p className="text-slate-500 text-xs">
+                    Your balance at the top updates so you can see that refund before you save.
+                  </p>
+                </>
+              )}
+              <p className="pt-1 text-slate-800 font-semibold text-sm border-t border-slate-100 mt-3">
+                Nothing is final until you tap <span className="text-rose-600">Lock</span> again.
+              </p>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end flex-wrap">
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50"
+                onClick={cancelInsuranceDialog}
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-xl text-sm font-bold bg-rose-600 text-white hover:bg-rose-700"
+                onClick={confirmInsuranceDialog}
+              >
+                {insuranceDialog.want ? "Yes, add insurance" : "Yes, remove insurance"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

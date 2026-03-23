@@ -1,3 +1,4 @@
+import TeamLogoImg from "./TeamLogoImg";
 import { getTeamLogo, getTeamLogoVisualScale, resolveTeamShortName } from "../utils/teamLogos";
 
 type TeamLabelProps = {
@@ -16,12 +17,13 @@ export default function TeamLabel({ shortName, name, className = "", logoSize = 
   if (src) {
     return (
       <span className={`inline-flex items-center gap-1.5 ${className}`} title={name}>
-        <img
+        <TeamLogoImg
           src={src}
           alt=""
+          width={logoSize === "md" ? 28 : 20}
+          height={logoSize === "md" ? 28 : 20}
           className={`${sizeClass} flex-shrink-0`}
           style={{ transform: `scale(${logoScale})` }}
-          aria-hidden
         />
         <span>{resolvedShortName || shortName}</span>
       </span>

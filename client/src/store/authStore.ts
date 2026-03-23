@@ -14,10 +14,13 @@ interface AuthUser {
 interface AuthState {
   user: AuthUser | null;
   token: string | null;
+  /** Transient UI offset for header balance (e.g. insurance preview on match detail). Not persisted. */
+  balanceDisplayOffset: number;
   login: (token: string, user: AuthUser) => void;
   logout: () => void;
   setBalance: (balance: number) => void;
   updateUser: (updates: Partial<AuthUser>) => void;
+  setBalanceDisplayOffset: (delta: number) => void;
 }
 
 function loadPersistedState(): { token: string | null; user: AuthUser | null } {
@@ -53,17 +56,18 @@ function subscribeToStorageSync() {
 export const useAuthStore = create<AuthState>((set) => ({
   user: persisted.user,
   token: persisted.token,
+  balanceDisplayOffset: 0,
 
   login: (token, user) => {
     localStorage.setItem("auth_token", token);
     localStorage.setItem("auth_user", JSON.stringify(user));
-    set({ token, user });
+    set({ token, user, balanceDisplayOffset: 0 });
   },
 
   logout: () => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user");
-    set({ token: null, user: null });
+    set({ token: null, user: null, balanceDisplayOffset: 0 });
   },
 
   setBalance: (balance) =>
@@ -81,6 +85,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem("auth_user", JSON.stringify(updated));
       return { user: updated };
     }),
+
+  setBalanceDisplayOffset: (delta) => set({ balanceDisplayOffset: delta }),
 }));
 
 subscribeToStorageSync();

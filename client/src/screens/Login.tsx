@@ -35,7 +35,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center font-bold text-lg mx-auto mb-4">
             IP
           </div>
-          <h1 className="text-2xl font-bold">Welcome back</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to your account</p>
         </div>
 
@@ -47,7 +47,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
               placeholder="you@example.com"
             />
           </div>
@@ -64,19 +64,19 @@ export default function Login() {
             />
           </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-primary-600 hover:bg-primary-500 disabled:bg-slate-300 disabled:text-slate-500 rounded-lg text-sm font-medium transition-colors"
+            className="w-full py-2.5 bg-primary-600 text-white hover:bg-primary-500 disabled:bg-slate-300 disabled:text-slate-500 rounded-lg text-sm font-medium transition-colors"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>
 
           <p className="text-center text-sm text-slate-500">
             Don't have an account?{" "}
-            <Link to="/register" className="text-primary-400 hover:text-primary-300 font-medium">
+            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
               Register
             </Link>
           </p>

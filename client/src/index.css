@@ -3,9 +3,64 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-slate-100 text-slate-900;
+  /* Keep native date/time/number pickers in light chrome even when OS prefers dark */
+  html {
+    color-scheme: light;
   }
+
+  body {
+    @apply bg-slate-100 text-slate-900 antialiased;
+  }
+
+  /*
+   * Readable text inside inputs (inherits badly with autofill, some WebKit builds,
+   * or parent text-white). Checkboxes/radios excluded.
+   */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"],
+  input[type="month"],
+  input[type="week"],
+  textarea,
+  select {
+    @apply text-slate-900;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-slate-400;
+  }
+
+  input:disabled:not([type="checkbox"]):not([type="radio"]),
+  textarea:disabled,
+  select:disabled {
+    @apply text-slate-500 opacity-90;
+  }
+}
+
+/* Chrome/Safari autofill: avoid white/yellow text on light fill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(15 23 42) !important;
+  caret-color: rgb(15 23 42);
+  -webkit-box-shadow: 0 0 0 1000px rgb(255 255 255) inset !important;
+  box-shadow: 0 0 0 1000px rgb(255 255 255) inset !important;
+  transition: background-color 9999s ease-out;
 }
 
 .safe-area-pb {

@@ -23,93 +23,123 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-/* ── Shared table row used in both main table and sticky bar ── */
-function TableRow({
+/**
+ * Leaderboard is NOT a <table>: iOS Safari / WebKit often ignore position:sticky on table cells.
+ * Each row is flex; Rank + Player are sticky inside overflow-x-auto (works reliably).
+ */
+const ROW = "flex w-max min-w-[720px] items-stretch border-b border-slate-100 text-sm";
+
+/* left-14 (3.5rem) = width of rank column — must match w-14 */
+const STICKY_RANK =
+  "sticky left-0 z-[12] flex w-14 shrink-0 items-center justify-center border-r border-slate-200/90 bg-white";
+const STICKY_PLAYER =
+  "sticky left-14 z-[12] flex w-36 shrink-0 items-center border-r border-slate-200/90 bg-white shadow-[4px_0_14px_-6px_rgba(15,23,42,0.18)]";
+
+const STICKY_RANK_HDR = STICKY_RANK.replace("z-[12]", "z-[20]").replace("bg-white", "bg-slate-50");
+const STICKY_PLAYER_HDR = STICKY_PLAYER.replace("z-[12]", "z-[20]").replace("bg-white", "bg-slate-50");
+
+const statHead =
+  "relative z-0 shrink-0 border-slate-100 bg-slate-50 px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-widest text-slate-400";
+const statCell = "relative z-0 shrink-0 px-4 py-3.5 text-right tabular-nums";
+
+function LeaderboardHeader() {
+  return (
+    <div className={`${ROW} bg-slate-50`} role="row">
+      <div
+        className={`${STICKY_RANK_HDR} px-2 py-3.5 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400`}
+        role="columnheader"
+      >
+        Rank
+      </div>
+      <div
+        className={`${STICKY_PLAYER_HDR} px-3 py-3.5 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400`}
+        role="columnheader"
+      >
+        Player
+      </div>
+      <div className={`${statHead} w-32 whitespace-nowrap`} role="columnheader">
+        Balance 💰
+      </div>
+      <div className={`${statHead} w-16`} role="columnheader" title="Wins">
+        W
+      </div>
+      <div className={`${statHead} w-16`} role="columnheader" title="Losses">
+        L
+      </div>
+      <div
+        className={`${statHead} min-w-[7rem] whitespace-nowrap`}
+        role="columnheader"
+        title="Extra payout when you won on the minority side"
+      >
+        Underdog*
+      </div>
+      <div className={`${statHead} min-w-[7.5rem] whitespace-nowrap`} role="columnheader">
+        Profit 💰
+      </div>
+      <div
+        className={`${statHead} min-w-[7rem] whitespace-nowrap`}
+        role="columnheader"
+        title="Deductions for missed matches"
+      >
+        Missed 💰
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardBodyRow({
   entry,
   rank,
   isMe,
-  stickyBg = "bg-white",
 }: {
   entry: LeaderboardEntry;
   rank: number;
   isMe: boolean;
-  stickyBg?: string;
 }) {
-  const rowBg   = isMe ? "bg-rose-50/60 hover:bg-rose-50" : "hover:bg-slate-50/80";
-  const stickyCell = `md:sticky md:z-10 ${isMe ? stickyBg + " group-hover:bg-rose-50" : stickyBg + " group-hover:bg-slate-50/80"}`;
+  const rowBg = isMe ? "bg-rose-50/90 hover:bg-rose-50" : "bg-white hover:bg-slate-50/90";
+  const stickyRank = isMe ? `${STICKY_RANK} !bg-rose-50` : STICKY_RANK;
+  const stickyPlayer = isMe ? `${STICKY_PLAYER} !bg-rose-50` : STICKY_PLAYER;
 
   return (
-    <tr className={`group transition-colors ${rowBg}`}>
-      {/* Rank — sticky */}
-      <td className={`${stickyCell} md:left-0 px-4 py-3.5`}>
+    <div className={`${ROW} ${rowBg} transition-colors`} role="row">
+      <div className={`${stickyRank} py-3.5`}>
         <RankBadge rank={rank} />
-      </td>
-
-      {/* Player — sticky */}
-      <td className={`${stickyCell} md:left-14 px-4 py-3.5 md:shadow-[3px_0_8px_-2px_rgba(0,0,0,0.06)] font-semibold ${isMe ? "text-rose-600" : "text-slate-800"}`}>
-        <span className="flex items-center gap-2 min-w-0">
+      </div>
+      <div
+        className={`${stickyPlayer} min-w-0 px-3 py-3.5 font-semibold ${isMe ? "text-rose-700" : "text-slate-800"}`}
+      >
+        <span className="flex min-w-0 items-center gap-2">
           <span className="truncate">{entry.user.username}</span>
           {isMe && (
-            <span className="shrink-0 text-[10px] bg-rose-100 text-rose-500 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+            <span className="shrink-0 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-500">
               You
             </span>
           )}
         </span>
-      </td>
-
-      {/* Balance */}
-      <td className="px-4 py-3.5 text-right font-bold text-emerald-600 tabular-nums">
-        {formatNumber(entry.balance, 2)}
-      </td>
-
-      {/* W */}
-      <td className="px-4 py-3.5 text-right text-emerald-600 font-medium tabular-nums">
-        {entry.totalWins}
-      </td>
-
-      {/* L */}
-      <td className="px-4 py-3.5 text-right text-red-400 tabular-nums">
-        {entry.totalLosses}
-      </td>
-
-      {/* Underdog */}
-      <td className="px-4 py-3.5 text-right text-amber-500 tabular-nums">
+      </div>
+      <div className={`${statCell} w-32 font-bold text-emerald-600`}>{formatNumber(entry.balance, 2)}</div>
+      <div className={`${statCell} w-16 font-medium text-emerald-600`}>{entry.totalWins}</div>
+      <div className={`${statCell} w-16 text-red-400`}>{entry.totalLosses}</div>
+      <div className={`${statCell} min-w-[7rem] text-amber-500`}>
         {formatNumber(entry.underdogBonus ?? 0, 2)}
-      </td>
-
-      {/* Profit */}
-      <td className={`px-4 py-3.5 text-right font-semibold tabular-nums ${entry.profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-        {entry.profit >= 0 ? "+" : ""}{formatNumber(entry.profit, 2)}
-      </td>
-
-      {/* Missed */}
-      <td className="px-4 py-3.5 text-right text-red-400 tabular-nums">
-        {(entry.missedPenalties ?? 0) > 0
-          ? `−${formatNumber(entry.missedPenalties!, 2)}`
-          : <span className="text-slate-300">—</span>
-        }
-      </td>
-    </tr>
+      </div>
+      <div
+        className={`${statCell} min-w-[7.5rem] font-semibold ${entry.profit >= 0 ? "text-emerald-600" : "text-red-500"}`}
+      >
+        {entry.profit >= 0 ? "+" : ""}
+        {formatNumber(entry.profit, 2)}
+      </div>
+      <div className={`${statCell} min-w-[7rem] text-red-400`}>
+        {(entry.missedPenalties ?? 0) > 0 ? (
+          `−${formatNumber(entry.missedPenalties!, 2)}`
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </div>
+    </div>
   );
 }
 
-/* Shared colgroup — keeps sticky bar columns aligned with main table */
-function TableCols() {
-  return (
-    <colgroup>
-      <col style={{ width: "3.5rem" }} />  {/* Rank */}
-      <col style={{ width: "9rem" }} />   {/* Player */}
-      <col style={{ width: "8rem" }} />    {/* Balance */}
-      <col style={{ width: "4rem" }} />    {/* W */}
-      <col style={{ width: "4rem" }} />    {/* L */}
-      <col style={{ width: "7rem" }} />    {/* Underdog */}
-      <col style={{ width: "7.5rem" }} />  {/* Profit */}
-      <col style={{ width: "7rem" }} />    {/* Missed */}
-    </colgroup>
-  );
-}
-
-/* ── Main export ── */
 export default function LeaderboardScreen() {
   const { entries, setEntries, loading, setLoading, lastFetched } = useLeaderboardStore();
   const user = useAuthStore((s) => s.user);
@@ -128,15 +158,8 @@ export default function LeaderboardScreen() {
     }
   }, [setEntries, setLoading, lastFetched, entries.length]);
 
-  const myEntry = entries.find((e) => e.userId === user?.id) ?? null;
-  const myIndex = entries.findIndex((e) => e.userId === user?.id);
-  const myRank  = myEntry ? (myEntry.rank ?? myIndex + 1) : null;
-
   return (
-    /* pb-36 = clears sticky bar (≈52px) + bottom nav (≈64px) + breathing room */
-    <div className="min-h-screen bg-[#F8F9FC] pb-36">
-
-      {/* ══ HEADER ═══════════════════════════════════════════════════════ */}
+    <div className="min-h-screen bg-[#F8F9FC] pb-24 md:pb-36">
       <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -165,125 +188,77 @@ export default function LeaderboardScreen() {
         </div>
       </div>
 
-      {/* ══ CONTENT ══════════════════════════════════════════════════════ */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 space-y-4">
+        <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <p className="md:hidden rounded-t-2xl border-b border-slate-50 bg-slate-50/80 px-4 py-2 text-[11px] text-slate-400">
+            Swipe sideways for stats — <span className="font-semibold text-slate-600">Rank &amp; Player stay fixed.</span>
+          </p>
+          <div
+            className="relative isolate overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]"
+            data-prevent-route-swipe="true"
+            role="table"
+            aria-label="Leaderboard"
+          >
+            <div className="min-w-0">
+              <LeaderboardHeader />
 
-        {/* ── Table (desktop + mobile — single unified table with horizontal scroll) ── */}
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto" data-prevent-route-swipe="true">
-            <table className="w-full text-sm min-w-[580px]">
-              <TableCols />
-
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  {/* Rank — sticky header cell */}
-                  <th className="md:sticky md:left-0 md:z-20 bg-slate-50 text-left px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold whitespace-nowrap">
-                    Rank
-                  </th>
-                  {/* Player — sticky header cell */}
-                  <th className="md:sticky md:left-14 md:z-20 bg-slate-50 text-left px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold md:shadow-[3px_0_8px_-2px_rgba(0,0,0,0.06)] whitespace-nowrap">
-                    Player
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold whitespace-nowrap">
-                    Balance 💰
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold" title="Wins">
-                    W
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold" title="Losses">
-                    L
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold whitespace-nowrap" title="Extra payout when you won on the minority side">
-                    Underdog*
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold whitespace-nowrap">
-                    Profit 💰
-                  </th>
-                  <th className="text-right px-4 py-3.5 text-[11px] uppercase tracking-widest text-slate-400 font-semibold whitespace-nowrap" title="Deductions for missed matches">
-                    Missed 💰
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-50">
-                {loading ? (
-                  [1, 2, 3, 4, 5].map((row) => (
-                    <tr key={`s-${row}`} className="animate-pulse">
-                      <td className="md:sticky md:left-0 bg-white px-4 py-4">
-                        <div className="h-8 w-8 rounded-full bg-slate-100" />
-                      </td>
-                      <td className="md:sticky md:left-14 bg-white px-4 py-4 md:shadow-[3px_0_8px_-2px_rgba(0,0,0,0.06)]">
-                        <div className="h-3 w-28 rounded bg-slate-100" />
-                      </td>
-                      {[...Array(6)].map((_, i) => (
-                        <td key={i} className="px-4 py-4 text-right">
-                          <div className="h-3 w-12 rounded bg-slate-100 ml-auto" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : entries.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-16 text-center text-slate-400 text-sm">
-                      No players yet.
-                    </td>
-                  </tr>
-                ) : (
-                  entries.map((entry, i) => {
-                    const rank = entry.rank ?? i + 1;
-                    const isMe = entry.userId === user?.id;
-                    return (
-                      <TableRow
-                        key={entry.userId}
-                        entry={entry}
-                        rank={rank}
-                        isMe={isMe}
-                        stickyBg={isMe ? "bg-rose-50/60" : "bg-white"}
-                      />
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+              {loading ? (
+                [1, 2, 3, 4, 5].map((row) => (
+                  <div key={`s-${row}`} className={`${ROW} animate-pulse bg-white`} role="row">
+                    <div className={`${STICKY_RANK} py-4`}>
+                      <div className="h-8 w-8 rounded-full bg-slate-100" />
+                    </div>
+                    <div className={`${STICKY_PLAYER} py-4`}>
+                      <div className="h-3 w-28 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} w-32`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} w-16`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} w-16`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} min-w-[7rem]`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} min-w-[7.5rem]`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                    <div className={`${statCell} min-w-[7rem]`}>
+                      <div className="ml-auto h-3 w-12 rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))
+              ) : entries.length === 0 ? (
+                <div className="border-b border-slate-100 px-6 py-16 text-center text-sm text-slate-400" role="row">
+                  No players yet.
+                </div>
+              ) : (
+                entries.map((entry, i) => {
+                  const rank = entry.rank ?? i + 1;
+                  const isMe = entry.userId === user?.id;
+                  return (
+                    <LeaderboardBodyRow
+                      key={entry.userId}
+                      entry={entry}
+                      rank={rank}
+                      isMe={isMe}
+                    />
+                  );
+                })
+              )}
+            </div>
           </div>
 
-          {/* Table footer legend */}
-          <div className="border-t border-slate-100 px-5 py-3 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-slate-400">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-b-2xl border-t border-slate-100 px-5 py-3 text-[11px] text-slate-400">
             <span>Balance = entry + top-ups + profit − missed penalties</span>
             <span>* Underdog: 1.3× share of losing pool when winning on minority side</span>
             <span>Profit = betting gains/losses only</span>
           </div>
         </div>
-
       </div>
-
-      {/* ══ STICKY "YOU" ROW — compact and scoped to leaderboard area ═══ */}
-      {myEntry && myRank !== null && !loading && (
-        <div className="hidden md:block sticky bottom-20 lg:bottom-3 z-20 mt-2 px-4 sm:px-6 lg:px-10">
-          <div className="max-w-5xl mx-auto">
-            <div className="mb-1 flex items-center justify-between px-1">
-              <p className="text-[10px] text-slate-400 font-semibold">#{myRank}</p>
-            </div>
-            {/* Sticky row card — same colgroup keeps columns pixel-aligned with the main table */}
-            <div className="bg-white border border-rose-200 rounded-xl shadow-[0_3px_10px_rgba(15,23,42,0.08)] overflow-hidden">
-              <div className="overflow-x-auto" data-prevent-route-swipe="true">
-                <table className="w-full text-xs min-w-[580px]">
-                  <TableCols />
-                  <tbody>
-                    <TableRow
-                      entry={myEntry}
-                      rank={myRank}
-                      isMe={true}
-                      stickyBg="bg-rose-50/60"
-                    />
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
     </div>
   );
 }

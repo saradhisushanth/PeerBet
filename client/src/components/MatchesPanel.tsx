@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMatchStore } from "../store/matchStore";
+import TeamLogoImg from "./TeamLogoImg";
 import { getTeamLogo, getTeamLogoVisualScale } from "../utils/teamLogos";
 
 type StatusFilter = "UPCOMING" | "LIVE" | "COMPLETED";
@@ -49,7 +50,8 @@ export default function MatchesPanel({ className = "" }: MatchesPanelProps) {
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT + ROW_GAP,
-    overscan: 5,
+    // Larger overscan keeps rows (and logo <img> nodes) mounted longer → fewer decode flashes on scroll
+    overscan: 14,
   });
 
   const getCountdown = (startTime: string): string => {
@@ -201,12 +203,13 @@ export default function MatchesPanel({ className = "" }: MatchesPanelProps) {
                       <div className="flex items-center gap-2.5 flex-1 min-w-0 flex-row-reverse">
                         <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-1">
                           {awayLogo ? (
-                            <img
+                            <TeamLogoImg
                               src={awayLogo}
                               alt={match.awayTeam.name}
+                              width={40}
+                              height={40}
                               className="w-full h-full object-contain"
                               style={{ transform: `scale(${awayScale})` }}
-                              loading="lazy"
                             />
                           ) : (
                             <span className="text-[10px] font-extrabold text-slate-700">{match.awayTeam.shortName}</span>

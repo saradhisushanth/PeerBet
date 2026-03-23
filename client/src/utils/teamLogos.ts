@@ -62,3 +62,28 @@ export function getTeamLogoVisualScale(shortName?: string | null, teamName?: str
   const resolved = resolveTeamShortName(shortName, teamName);
   return TEAM_LOGO_VISUAL_SCALE[resolved] ?? 1;
 }
+
+/** Unique static logo URLs under `/public/teams/` — safe to warm cache early. */
+export const ALL_TEAM_LOGO_URLS: readonly string[] = Object.freeze([...new Set(Object.values(TEAM_LOGOS))]);
+
+let prefetchStarted = false;
+
+/**
+ * Start loading all team PNGs during idle time so list/detail views hit HTTP cache.
+ * Call once from app bootstrap (e.g. main.tsx).
+ */
+export function prefetchAllTeamLogos(): void {
+  if (typeof window === "undefined" || prefetchStarted) return;
+  prefetchStarted = true;
+
+  const run = () => {
+    for (const href of ALL_TEAM_LOGO_URLS) {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = href;
+    }
+  };
+
+  // After current stack — warms HTTP cache before user opens match list/detail.
+  queueMicrotask(run);
+}

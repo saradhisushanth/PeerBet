@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from "@shared/constants";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../services/api";
 
@@ -36,7 +37,7 @@ export default function Register() {
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center font-bold text-lg mx-auto mb-4">
             IP
           </div>
-          <h1 className="text-2xl font-bold">Create your account</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Create your account</h1>
           <p className="text-slate-500 text-sm mt-1">Start with 1,000 credits to bet</p>
         </div>
 
@@ -46,12 +47,17 @@ export default function Register() {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.replace(/\s/g, "").slice(0, USERNAME_MAX_LENGTH))}
               required
-              minLength={3}
-              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              minLength={USERNAME_MIN_LENGTH}
+              maxLength={USERNAME_MAX_LENGTH}
+              autoComplete="username"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
               placeholder="Pick a username"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              {USERNAME_MIN_LENGTH}–{USERNAME_MAX_LENGTH} characters, no spaces (fits leaderboard layout).
+            </p>
           </div>
 
           <div>
@@ -74,12 +80,12 @@ export default function Register() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary-500 transition-colors"
+              className="w-full bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
               placeholder="At least 6 characters"
             />
           </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
           <button
             type="submit"
@@ -91,7 +97,7 @@ export default function Register() {
 
           <p className="text-center text-sm text-slate-500">
             Already have an account?{" "}
-            <Link to="/login" className="text-primary-400 hover:text-primary-300 font-medium">
+            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
               Sign in
             </Link>
           </p>

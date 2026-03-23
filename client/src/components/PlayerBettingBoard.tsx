@@ -211,10 +211,11 @@ export default function PlayerBettingBoard({
   winnerTeamId,
 }: PlayerBettingBoardProps) {
   const canBet = (bettingOpen !== undefined ? bettingOpen : isUpcoming) && canAffordBet;
+  /* Touch: delay avoids fighting scroll + layout route-swipe; tolerance allows small finger jitter */
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 50, tolerance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 12 } })
   );
 
   const homePoolTotal = board.onHome.reduce((s, p) => s + p.amount, 0);
@@ -257,7 +258,7 @@ export default function PlayerBettingBoard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-prevent-route-swipe="true">
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}

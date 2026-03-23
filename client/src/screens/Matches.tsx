@@ -3,13 +3,14 @@ import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMatchStore, type Match } from "../store/matchStore";
 import { api } from "../services/api";
+import TeamLogoImg from "../components/TeamLogoImg";
 import { getTeamLogo, getTeamLogoVisualScale } from "../utils/teamLogos";
 
 type StatusFilter = "ALL" | "UPCOMING" | "LIVE" | "COMPLETED";
 
 const ROW_HEIGHT = 224;
 const ROW_GAP = 16;
-const OVERSCAN = 4;
+const OVERSCAN = 14;
 
 const STALE_MS = 30_000;
 
@@ -89,8 +90,8 @@ export default function Matches() {
   return (
     <div className="flex flex-col h-full min-h-0 bg-[#F8F9FC]">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-8 py-5 shadow-sm">
+      {/* ── Header: sticky to top of scroll area (layout mobile pt-0 + square card top = flush under app bar) ── */}
+      <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-100 bg-white px-4 py-5 shadow-[0_4px_20px_-6px_rgba(15,23,42,0.12)] sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           {/* Title */}
           <div>
@@ -137,23 +138,23 @@ export default function Matches() {
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className="bg-white border border-slate-100 rounded-2xl px-5 py-4 shadow-sm animate-pulse"
+                className="animate-pulse rounded-3xl border border-slate-100 bg-white px-5 py-4 shadow-sm"
               >
                 <div className="h-3 w-28 rounded bg-slate-100 mb-4 mx-auto" />
                 <div className="h-px bg-slate-100 mb-4" />
                 <div className="flex items-center justify-between">
-                  <div className="h-[86px] w-[86px] rounded-2xl bg-slate-100" />
+                  <div className="h-[86px] w-[86px] rounded-3xl bg-slate-100" />
                   <div className="flex flex-col items-center gap-2">
                     <div className="h-4 w-8 rounded bg-slate-100" />
-                    <div className="h-8 w-[120px] rounded-xl bg-slate-100" />
+                    <div className="h-8 w-[120px] rounded-2xl bg-slate-100" />
                   </div>
-                  <div className="h-[86px] w-[86px] rounded-2xl bg-slate-100" />
+                  <div className="h-[86px] w-[86px] rounded-3xl bg-slate-100" />
                 </div>
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center shadow-sm">
+          <div className="rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
             <p className="text-slate-400 text-sm">No matches found.</p>
           </div>
         ) : (
@@ -193,7 +194,7 @@ export default function Matches() {
                       height: `${virtualRow.size}px`,
                     }}
                   >
-                    <div className="h-[calc(100%-16px)] bg-white border border-slate-100 rounded-2xl px-5 py-4 hover:border-rose-200 hover:shadow-md transition-all flex flex-col shadow-sm group">
+                    <div className="group flex h-[calc(100%-16px)] flex-col rounded-3xl border border-slate-100 bg-white px-5 py-4 shadow-sm transition-all hover:border-rose-200 hover:shadow-md">
 
                       {/* ── Match header ── */}
                       <div className="flex items-center justify-between mb-3">
@@ -218,7 +219,7 @@ export default function Matches() {
 
                         {/* Home team */}
                         <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                          <div className="w-[82px] h-[82px] rounded-2xl border border-slate-100 bg-slate-50 p-2.5 flex items-center justify-center shadow-sm group-hover:border-slate-200 transition-colors">
+                          <div className="flex h-[82px] w-[82px] items-center justify-center rounded-3xl border border-slate-100 bg-slate-50 p-2.5 shadow-sm transition-colors group-hover:border-slate-200">
                             {homeLogo ? (
                               <img
                                 src={homeLogo}
@@ -242,7 +243,7 @@ export default function Matches() {
                         <div className="flex flex-col items-center gap-2 shrink-0">
                           <p className="text-sm font-extrabold tracking-widest text-slate-400">VS</p>
                           <span
-                            className={`inline-flex items-center justify-center h-7 w-[92px] rounded-lg text-[11px] font-bold tracking-[0.03em] ${statusBadgeStyle[match.status]}`}
+                            className={`inline-flex h-7 w-[92px] items-center justify-center rounded-2xl text-[11px] font-bold tracking-[0.03em] ${statusBadgeStyle[match.status]}`}
                           >
                             {match.status === "LIVE" && (
                               <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/70 animate-pulse mr-1.5" />
@@ -256,14 +257,15 @@ export default function Matches() {
 
                         {/* Away team */}
                         <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                          <div className="w-[82px] h-[82px] rounded-2xl border border-slate-100 bg-slate-50 p-2.5 flex items-center justify-center shadow-sm group-hover:border-slate-200 transition-colors">
+                          <div className="flex h-[82px] w-[82px] items-center justify-center rounded-3xl border border-slate-100 bg-slate-50 p-2.5 shadow-sm transition-colors group-hover:border-slate-200">
                             {awayLogo ? (
-                              <img
+                              <TeamLogoImg
                                 src={awayLogo}
                                 alt={match.awayTeam.name}
+                                width={82}
+                                height={82}
                                 className="max-h-full max-w-full object-contain"
                                 style={{ transform: `scale(${awayLogoScale})` }}
-                                loading="lazy"
                               />
                             ) : (
                               <p className="font-extrabold text-sm text-slate-800">

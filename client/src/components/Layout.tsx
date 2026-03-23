@@ -21,7 +21,7 @@ const desktopTabs = [
 ] as const;
 
 export default function Layout() {
-  const { user, logout, updateUser, token } = useAuthStore();
+  const { user, logout, updateUser, token, balanceDisplayOffset } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [topUpSnack, setTopUpSnack] = useState<number | null>(null);
@@ -207,8 +207,11 @@ export default function Layout() {
             )}
             <span className="text-xs text-slate-300">·</span>
             <span className="text-xs text-slate-500">Balance:</span>
-            <span className="text-sm font-semibold text-emerald-600">
-              {user?.balance != null ? formatCurrency(user.balance, 2) : formatCurrency(0, 2)}
+            <span
+              className={`text-sm font-semibold tabular-nums ${balanceDisplayOffset !== 0 ? "text-amber-700" : "text-emerald-600"}`}
+              title={balanceDisplayOffset !== 0 ? "Includes insurance preview for this match" : undefined}
+            >
+              {formatCurrency((user?.balance ?? 0) + balanceDisplayOffset, 2)}
             </span>
             <button
               onClick={handleLogout}
@@ -249,14 +252,18 @@ export default function Layout() {
       {/* Mobile/Tablet routed view */}
       {!isDesktopViewport && (
       <div
-        className="flex-1 min-h-0 overflow-hidden relative"
+        /* overflow-clip: clip without creating an extra scrollport — overflow-hidden breaks position:sticky (e.g. leaderboard columns) in WebKit */
+        className="flex-1 min-h-0 overflow-clip relative"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <div
-          className="h-full overflow-auto p-4"
-        >
-          <div className="h-full rounded-xl border border-slate-200 bg-white overflow-auto shadow-sm">
+        {/* pt-0: no gap above route content; sticky headers (e.g. Board) sit flush under app bar */}
+        <div className="h-full min-h-0 overflow-auto px-4 pb-4 pt-0">
+          {/*
+            h-full: Matches uses h-full + an inner overflow-auto virtualizer; parent must have definite height.
+            Taller pages overflow this box; scroll height still grows on this overflow-auto wrapper.
+          */}
+          <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm max-lg:rounded-t-none max-lg:rounded-b-2xl">
             <Outlet />
           </div>
         </div>
@@ -275,7 +282,7 @@ export default function Layout() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-slate-800 transition-colors"
               >
                 Cancel
               </button>
