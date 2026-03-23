@@ -53,7 +53,7 @@ function PlayerChip({
 
   if (!draggable) {
     return (
-      <span className={`px-2.5 py-1 rounded-lg text-sm inline-block ${isMe ? "bg-primary-500/30 text-primary-300 ring-1 ring-primary-400/60" : "bg-gray-700/80 text-gray-200"}`}>
+      <span className={`px-2.5 py-1 rounded-lg text-sm inline-block ${isMe ? "bg-rose-100 text-rose-700 ring-1 ring-rose-300" : "bg-slate-100 text-slate-700"}`}>
         {displayLabel}
         {insured && <span className="ml-1.5 text-amber-400" title="Insured — get refund if you lose">🛡</span>}
       </span>
@@ -66,8 +66,8 @@ function PlayerChip({
       {...attributes}
       data-draggable-chip
       title={onSide ? "Drag to change team or use buttons below" : "Drag to a team or use buttons below"}
-      className={`inline-block px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-sm select-none cursor-grab active:cursor-grabbing ${
-        isDragging ? "bg-primary-500/80 shadow-lg z-50 opacity-90 cursor-grabbing" : isMe ? "bg-primary-500/80 text-white ring-2 ring-primary-400/80 hover:bg-primary-500 active:bg-primary-500" : "bg-primary-600/60 text-white hover:bg-primary-500/80 active:bg-primary-500"
+      className={`inline-flex px-3 py-2 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-sm select-none cursor-grab active:cursor-grabbing ${
+        isDragging ? "bg-rose-500/85 shadow-lg z-50 opacity-90 cursor-grabbing text-white" : isMe ? "bg-rose-500 text-white ring-2 ring-rose-300 hover:bg-rose-600 active:bg-rose-600" : "bg-slate-200 text-slate-800 hover:bg-slate-300 active:bg-slate-300"
       }`}
       style={{ touchAction: "none", cursor: "grab", pointerEvents: "auto" }}
     >
@@ -115,11 +115,11 @@ function DroppableZone({
     <div
       ref={setNodeRef}
       className={`rounded-xl border-2 min-h-[100px] p-3 transition-colors ${
-        isWinner ? "border-green-500/80 bg-green-500/10" : isOver ? "border-primary-500 bg-primary-500/10" : "border-gray-700 bg-gray-800/50"
+        isWinner ? "border-emerald-400 bg-emerald-50" : isOver ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-white"
       } ${className ?? ""}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 mb-2">
-        <h3 className={`text-xs font-semibold ${isWinner ? "text-green-400" : "text-gray-400"}`} title={`Drop your chip here to bet on ${title}`}>
+        <h3 className={`text-xs font-semibold ${isWinner ? "text-emerald-600" : "text-slate-500"}`} title={`Drop your chip here to bet on ${title}`}>
           {title}{isWinner && " — WINNER"}
         </h3>
         {poolTotal !== undefined && poolTotal >= 0 && (
@@ -161,10 +161,10 @@ function UndecidedZone({
     <div
       ref={setNodeRef}
       className={`rounded-xl border-2 min-h-[100px] p-3 transition-colors ${
-        isOver ? "border-primary-500 bg-primary-500/10 border-dashed" : "border-dashed border-gray-700 bg-gray-800/30"
+        isOver ? "border-rose-400 bg-rose-50 border-dashed" : "border-dashed border-slate-300 bg-slate-50"
       }`}
     >
-      <h3 className="text-xs font-semibold text-gray-400 mb-2" title="Drag your name here or use the buttons below to pick a team">Choose a side</h3>
+      <h3 className="text-xs font-semibold text-slate-500 mb-2" title="Drag your name here or use the buttons below to pick a team">Choose a side</h3>
       <div className="flex flex-wrap gap-2">
         {sortedUndecided.map((p) => (
           <PlayerChip
@@ -176,7 +176,7 @@ function UndecidedZone({
           />
         ))}
         {board.undecided.length === 0 && (
-          <p className="text-gray-500 text-xs">Everyone has picked.</p>
+          <p className="text-slate-500 text-xs">Everyone has picked.</p>
         )}
       </div>
     </div>
@@ -211,10 +211,11 @@ export default function PlayerBettingBoard({
   winnerTeamId,
 }: PlayerBettingBoardProps) {
   const canBet = (bettingOpen !== undefined ? bettingOpen : isUpcoming) && canAffordBet;
+  /* Touch: delay avoids fighting scroll + layout route-swipe; tolerance allows small finger jitter */
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 50, tolerance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 12 } })
   );
 
   const homePoolTotal = board.onHome.reduce((s, p) => s + p.amount, 0);
@@ -257,7 +258,7 @@ export default function PlayerBettingBoard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-prevent-route-swipe="true">
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -294,8 +295,8 @@ export default function PlayerBettingBoard({
       </DndContext>
 
       {canChange && (
-        <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-3">
-          <p className="text-xs text-gray-400 mb-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <p className="text-xs text-slate-500 mb-2">
             Your pick — drag your name above, or tap a button below. You can remove your bet until lock time.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -320,7 +321,7 @@ export default function PlayerBettingBoard({
                 <button
                   type="button"
                   disabled
-                  className="min-h-[44px] min-w-[44px] px-4 py-3 rounded-lg text-sm font-medium bg-gray-600/60 text-gray-500 cursor-not-allowed [touch-action:manipulation]"
+                  className="min-h-[44px] min-w-[44px] px-4 py-3 rounded-lg text-sm font-medium bg-slate-200 text-slate-500 cursor-not-allowed [touch-action:manipulation]"
                 >
                   Remove Bet
                 </button>
@@ -340,7 +341,7 @@ export default function PlayerBettingBoard({
                   type="button"
                   onClick={async () => { await onCancelBet?.(); }}
                   disabled={placing}
-                  className="min-h-[44px] min-w-[44px] px-4 py-3 rounded-lg text-sm font-medium bg-gray-600 text-gray-200 hover:bg-gray-500 active:bg-gray-500 disabled:opacity-50 [touch-action:manipulation]"
+                  className="min-h-[44px] min-w-[44px] px-4 py-3 rounded-lg text-sm font-medium bg-slate-200 text-slate-700 hover:bg-slate-300 active:bg-slate-300 disabled:opacity-50 [touch-action:manipulation]"
                   title="Remove your bet until lock time"
                 >
                   Remove Bet on {onHome ? board.homeTeam.shortName : board.awayTeam.shortName} (<span key={myStake} className="stake-value-transition">{formatCurrency(myStake)}</span>)

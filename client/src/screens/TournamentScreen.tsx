@@ -12,6 +12,33 @@ const STALE_MS = 30_000;
 
 let tournamentCache: { data: Details; fetchedAt: number } | null = null;
 
+const RANK_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th" };
+const RANK_MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
+
+// ── Shared skeleton block ────────────────────────────────────────────────────
+function SkeletonBlock({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm animate-pulse space-y-3">
+      <div className="h-4 w-36 rounded bg-slate-100" />
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className={`h-3 rounded bg-slate-100 ${i % 2 === 0 ? "w-full" : "w-3/4"}`} />
+      ))}
+    </div>
+  );
+}
+
+// ── Section wrapper ──────────────────────────────────────────────────────────
+function Section({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden ${className}`}>
+      <div className="px-5 py-4 border-b border-slate-100">
+        <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">{title}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function TournamentScreen() {
   const user = useAuthStore((s) => s.user);
   const [details, setDetails] = useState<Details | null>(tournamentCache?.data ?? null);
@@ -52,23 +79,16 @@ export default function TournamentScreen() {
 
   useEffect(() => {
     const isStale = !tournamentCache || Date.now() - tournamentCache.fetchedAt > STALE_MS;
-    if (!isStale) {
-      setLoading(false);
-      return;
-    }
+    if (!isStale) { setLoading(false); return; }
     retryCountRef.current = 0;
-    const cleanup = fetchDetails(true);
-    return cleanup;
+    return fetchDetails(true);
   }, [fetchDetails]);
 
   async function handleWalletTopUp(e: React.FormEvent) {
     e.preventDefault();
     if (!topUpUserId || !topUpAmount) return;
     const amount = Number(topUpAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Enter a valid positive amount");
-      return;
-    }
+    if (!Number.isFinite(amount) || amount <= 0) { setError("Enter a valid positive amount"); return; }
     setTopUpSubmitting(true);
     setError(null);
     try {
@@ -87,168 +107,318 @@ export default function TournamentScreen() {
     }
   }
 
-  // Only block the whole screen on first load; when revalidating, keep showing cached details.
+  // ── Full-page skeleton ─────────────────────────────────────────────────────
   if (loading && !details) {
     return (
-      <div className="space-y-6 pb-20">
-        <h1 className="text-3xl font-bold">Tournament</h1>
-        <p className="text-gray-500">Loading...</p>
+      <div className="min-h-screen bg-[#F8F9FC] pb-24">
+        <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
+          <div className="max-w-3xl mx-auto animate-pulse space-y-2">
+            <div className="h-3 w-24 rounded bg-slate-100" />
+            <div className="h-7 w-44 rounded bg-slate-100" />
+            <div className="h-3 w-64 rounded bg-slate-100" />
+          </div>
+        </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-10 space-y-4">
+          {[3, 4, 3].map((lines, i) => <SkeletonBlock key={i} lines={lines} />)}
+        </div>
       </div>
     );
   }
 
+  // ── Error state ────────────────────────────────────────────────────────────
   if (error && !details) {
     return (
-      <div className="space-y-6 pb-20">
-        <h1 className="text-3xl font-bold">Tournament</h1>
-        <div className="bg-gray-900 border border-red-800 rounded-xl p-6 text-center space-y-3">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => fetchDetails()} className="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-500">
-            Retry
-          </button>
+      <div className="min-h-screen bg-[#F8F9FC] pb-24">
+        <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
+          <div className="max-w-3xl mx-auto">
+            <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold mb-1">Season Info</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Tournament</h1>
+          </div>
+        </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-10">
+          <div className="bg-white border border-red-100 rounded-2xl p-8 text-center space-y-4 shadow-sm">
+            <div className="text-3xl">⚠️</div>
+            <p className="text-red-400 text-sm font-medium">{error}</p>
+            <button
+              onClick={() => fetchDetails()}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20">
-      <div>
-        <h1 className="text-3xl font-bold">Tournament</h1>
-        <p className="text-gray-400 mt-1">Prize distribution, rules, and balance sheet.</p>
+    <div className="min-h-screen bg-[#F8F9FC] pb-24">
+      {/* ── Page Header ─────────────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
+        <div className="max-w-3xl mx-auto">
+          <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold mb-1">Season Info</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Tournament</h1>
+          <p className="text-slate-500 text-sm mt-1">Prize distribution, rules, and balance sheet.</p>
+        </div>
       </div>
 
-      {details && (
-        <>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <h2 className="font-semibold text-lg mb-2">Total prize pool</h2>
-            <p className="text-2xl font-bold text-green-400">{formatPrizePool(details.totalPrizePool, 2)}</p>
-            <p className="text-xs text-gray-500 mt-1">Sum of all players&apos; contributions (entry + admin-approved top-ups).</p>
-          </div>
-
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <h2 className="font-semibold mb-3">Prize distribution</h2>
-            <p className="text-xs text-gray-500 mb-3">Final standings by in-game balance. 1st–5th get a share; 6th and below receive ₹0.</p>
-            <ul className="space-y-2">
-              {details.prizeDistribution.map(({ rank, percent, amount }) => (
-                <li key={rank} className="flex justify-between text-sm">
-                  <span className="text-gray-400">{rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : `${rank}th`} place — {percent}%</span>
-                  <span className="font-medium text-green-400">{formatPrizePool(amount, 2)}</span>
-                </li>
-              ))}
-              <li className="flex justify-between text-sm border-t border-gray-800 pt-2 mt-2">
-                <span className="text-gray-500">House / rollover — {details.houseCutPercent}%</span>
-                <span className="text-amber-400/90">{formatPrizePool(details.houseCutAmount, 2)}</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <h2 className="font-semibold mb-3">Rules</h2>
-            <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
-              {details.rules.map((rule, i) => (
-                <li key={i}>{rule}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <h2 className="font-semibold px-4 py-3 border-b border-gray-800">Balance sheet</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800 text-gray-400">
-                    <th className="text-left px-4 py-2">Player</th>
-                    <th className="text-right px-4 py-2">Coins 💰</th>
-                    <th className="text-right px-4 py-2">Prize pool contribution ₹</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {details.balanceSheet.map((row) => (
-                    <tr key={row.userId} className="border-b border-gray-800/50">
-                      <td className={`px-4 py-2 font-medium ${row.userId === user?.id ? "text-primary-400 font-semibold" : ""}`}>{row.username}{row.userId === user?.id ? " (you)" : ""}</td>
-                      <td className="px-4 py-2 text-right text-green-400">{formatNumber(row.balance, 2)}</td>
-                      <td className="px-4 py-2 text-right text-amber-400/90">{formatPrizePool(row.prizePoolContribution, 2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-10 space-y-4">
+        {details && (
+          <>
+            {/* ── Prize Pool Hero ──────────────────────────────────────────── */}
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm px-5 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold mb-1">Total Prize Pool</p>
+                <p className="text-3xl font-extrabold text-emerald-600 tracking-tight">
+                  {formatPrizePool(details.totalPrizePool, 2)}
+                </p>
+              </div>
+              <p className="text-xs text-slate-400 sm:text-right sm:max-w-[220px]">
+                Sum of all players' contributions (entry + admin-approved top-ups).
+              </p>
             </div>
-          </div>
 
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <h2 className="font-semibold px-4 py-3 border-b border-gray-800">Wallet transactions</h2>
-            {details.transactions.length === 0 ? (
-              <p className="px-4 py-6 text-gray-500 text-sm">No top-ups yet. When a player adds money (with admin approval), it appears here.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            {/* ── Prize Distribution ───────────────────────────────────────── */}
+            <Section title="Prize Distribution">
+              <div className="px-5 py-4">
+                <p className="text-xs text-slate-400 mb-4">
+                  Final standings by in-game balance. 1st–5th get a share; 6th and below receive ₹0.
+                </p>
+                <div className="space-y-2">
+                  {details.prizeDistribution.map(({ rank, percent, amount }) => (
+                    <div
+                      key={rank}
+                      className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors"
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                        {RANK_MEDAL[rank] && <span>{RANK_MEDAL[rank]}</span>}
+                        <span>{RANK_LABEL[rank] ?? `${rank}th`} place</span>
+                        <span className="text-slate-400 font-normal">— {percent}%</span>
+                      </span>
+                      <span className="text-sm font-bold text-emerald-600 tabular-nums">
+                        {formatPrizePool(amount, 2)}
+                      </span>
+                    </div>
+                  ))}
+                  {/* House cut */}
+                  <div className="flex items-center justify-between py-2.5 px-3 rounded-xl border border-dashed border-slate-200 mt-3">
+                    <span className="text-sm text-slate-400">
+                      House / rollover — {details.houseCutPercent}%
+                    </span>
+                    <span className="text-sm font-semibold text-amber-500 tabular-nums">
+                      {formatPrizePool(details.houseCutAmount, 2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Section>
+
+            {/* ── Rules ────────────────────────────────────────────────────── */}
+            <Section title="Rules">
+              <ul className="px-5 py-4 space-y-2">
+                {details.rules.map((rule, i) => (
+                  <li key={i} className="flex gap-3 text-sm text-slate-700">
+                    <span className="mt-0.5 shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-400 text-[10px] font-bold">
+                      {i + 1}
+                    </span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+
+            {/* ── Balance Sheet ────────────────────────────────────────────── */}
+            <Section title="Balance Sheet">
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-slate-50">
+                {details.balanceSheet.map((row) => {
+                  const isMe = row.userId === user?.id;
+                  return (
+                    <div
+                      key={row.userId}
+                      className={`flex items-center justify-between px-5 py-3.5 ${isMe ? "bg-rose-50/40" : ""}`}
+                    >
+                      <span className={`text-sm font-semibold ${isMe ? "text-rose-600" : "text-slate-800"}`}>
+                        {row.username}
+                        {isMe && (
+                          <span className="ml-2 text-[10px] bg-rose-100 text-rose-500 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide align-middle">
+                            You
+                          </span>
+                        )}
+                      </span>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-emerald-600 tabular-nums">💰 {formatNumber(row.balance, 2)}</p>
+                        <p className="text-xs text-amber-500 tabular-nums">{formatPrizePool(row.prizePoolContribution, 2)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block">
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col />
+                    <col style={{ width: "9rem" }} />
+                    <col style={{ width: "11rem" }} />
+                  </colgroup>
                   <thead>
-                    <tr className="border-b border-gray-800 text-gray-400">
-                      <th className="text-left px-4 py-2">Player</th>
-                      <th className="text-right px-4 py-2">Amount ₹</th>
-                      <th className="text-left px-4 py-2">Date</th>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Player</th>
+                      <th className="text-right px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Coins 💰</th>
+                      <th className="text-right px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Prize pool ₹</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {details.transactions.map((tx) => (
-                      <tr key={tx.id} className="border-b border-gray-800/50">
-                        <td className={`px-4 py-2 font-medium ${tx.userId === user?.id ? "text-primary-400 font-semibold" : ""}`}>{tx.username}</td>
-                        <td className="px-4 py-2 text-right text-green-400">+ {formatPrizePool(tx.amount, 2)}</td>
-                        <td className="px-4 py-2 text-gray-500">{new Date(tx.createdAt).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-slate-50">
+                    {details.balanceSheet.map((row) => {
+                      const isMe = row.userId === user?.id;
+                      return (
+                        <tr key={row.userId} className={`transition-colors hover:bg-slate-50 ${isMe ? "bg-rose-50/40 hover:bg-rose-50/60" : ""}`}>
+                          <td className={`px-5 py-3 font-semibold text-sm ${isMe ? "text-rose-600" : "text-slate-800"}`}>
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{row.username}</span>
+                              {isMe && (
+                                <span className="shrink-0 text-[10px] bg-rose-100 text-rose-500 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                  You
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right text-emerald-600 font-bold tabular-nums">{formatNumber(row.balance, 2)}</td>
+                          <td className="px-5 py-3 text-right text-amber-500 font-semibold tabular-nums">{formatPrizePool(row.prizePoolContribution, 2)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </Section>
 
-          {isAdmin && (
-            <div className="bg-gray-900 border border-amber-500/30 rounded-xl p-4">
-              <h2 className="font-semibold text-amber-400/95 mb-3">Admin: Add to wallet</h2>
-              <p className="text-xs text-gray-500 mb-3">Increases the player&apos;s balance and their prize pool contribution. Requires your approval.</p>
-              {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
-              <form onSubmit={handleWalletTopUp} className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Player</label>
-                  <select
-                    value={topUpUserId}
-                    onChange={(e) => setTopUpUserId(e.target.value)}
-                    className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm min-w-[140px]"
-                    required
-                  >
-                    <option value="">Select</option>
-                    {details.balanceSheet.map((row) => (
-                      <option key={row.userId} value={row.userId}>{row.username}{row.userId === user?.id ? " (you)" : ""}</option>
-                    ))}
-                  </select>
+            {/* ── Wallet Transactions ──────────────────────────────────────── */}
+            <Section title="Wallet Transactions">
+              {details.transactions.length === 0 ? (
+                <p className="px-5 py-6 text-slate-400 text-sm">
+                  No top-ups yet. When a player adds money (with admin approval), it appears here.
+                </p>
+              ) : (
+                <>
+                  {/* Mobile cards */}
+                  <div className="sm:hidden divide-y divide-slate-50">
+                    {details.transactions.map((tx) => {
+                      const isMe = tx.userId === user?.id;
+                      return (
+                        <div key={tx.id} className={`flex items-center justify-between px-5 py-3.5 ${isMe ? "bg-rose-50/40" : ""}`}>
+                          <div>
+                            <p className={`text-sm font-semibold ${isMe ? "text-rose-600" : "text-slate-800"}`}>{tx.username}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{new Date(tx.createdAt).toLocaleString()}</p>
+                          </div>
+                          <span className="text-sm font-bold text-emerald-600 tabular-nums">+ {formatPrizePool(tx.amount, 2)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block">
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col />
+                        <col style={{ width: "9rem" }} />
+                        <col style={{ width: "13rem" }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          <th className="text-left px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Player</th>
+                          <th className="text-right px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Amount ₹</th>
+                          <th className="text-left px-5 py-3 text-[11px] uppercase tracking-widest text-slate-400 font-semibold">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {details.transactions.map((tx) => {
+                          const isMe = tx.userId === user?.id;
+                          return (
+                            <tr key={tx.id} className={`transition-colors hover:bg-slate-50 ${isMe ? "bg-rose-50/40 hover:bg-rose-50/60" : ""}`}>
+                              <td className={`px-5 py-3 font-semibold text-sm ${isMe ? "text-rose-600" : "text-slate-800"}`}>
+                                <span className="flex items-center gap-2">
+                                  <span className="truncate">{tx.username}</span>
+                                  {isMe && (
+                                    <span className="shrink-0 text-[10px] bg-rose-100 text-rose-500 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                      You
+                                    </span>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-right text-emerald-600 font-bold tabular-nums">+ {formatPrizePool(tx.amount, 2)}</td>
+                              <td className="px-5 py-3 text-slate-400 text-sm">{new Date(tx.createdAt).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </Section>
+
+            {/* ── Admin: Top-Up ────────────────────────────────────────────── */}
+            {isAdmin && (
+              <div className="bg-white border border-amber-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-amber-100 flex items-center gap-2">
+                  <span className="text-amber-500 text-base">🔐</span>
+                  <p className="text-[11px] uppercase tracking-[0.15em] text-amber-500 font-semibold">Admin — Add to Wallet</p>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Amount (₹)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={topUpAmount}
-                    onChange={(e) => setTopUpAmount(e.target.value)}
-                    className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm w-24"
-                    placeholder="500"
-                    required
-                  />
+                <div className="px-5 py-5">
+                  <p className="text-xs text-slate-400 mb-4">
+                    Increases the player's balance and their prize pool contribution. Requires your approval.
+                  </p>
+                  {error && (
+                    <div className="mb-4 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100 text-sm text-red-500">
+                      {error}
+                    </div>
+                  )}
+                  <form onSubmit={handleWalletTopUp} className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-xs text-slate-400 font-medium mb-1.5 uppercase tracking-wide">Player</label>
+                      <select
+                        value={topUpUserId}
+                        onChange={(e) => setTopUpUserId(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition"
+                        required
+                      >
+                        <option value="">Select player…</option>
+                        {details.balanceSheet.map((row) => (
+                          <option key={row.userId} value={row.userId}>
+                            {row.username}{row.userId === user?.id ? " (you)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-full sm:w-32">
+                      <label className="block text-xs text-slate-400 font-medium mb-1.5 uppercase tracking-wide">Amount (₹)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={topUpAmount}
+                        onChange={(e) => setTopUpAmount(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition"
+                        placeholder="500"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={topUpSubmitting}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-400 disabled:opacity-50 transition-colors shadow-sm"
+                    >
+                      {topUpSubmitting ? "Adding…" : "Add to wallet"}
+                    </button>
+                  </form>
                 </div>
-                <button
-                  type="submit"
-                  disabled={topUpSubmitting}
-                  className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-500 disabled:opacity-50"
-                >
-                  {topUpSubmitting ? "Adding…" : "Add to wallet"}
-                </button>
-              </form>
-            </div>
-          )}
-        </>
-      )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

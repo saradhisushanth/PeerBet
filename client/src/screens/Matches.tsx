@@ -3,18 +3,34 @@ import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMatchStore, type Match } from "../store/matchStore";
 import { api } from "../services/api";
+import TeamLogoImg from "../components/TeamLogoImg";
+import { getTeamLogo, getTeamLogoVisualScale } from "../utils/teamLogos";
 
 type StatusFilter = "ALL" | "UPCOMING" | "LIVE" | "COMPLETED";
 
-const ROW_HEIGHT = 140;
+const ROW_HEIGHT = 224;
 const ROW_GAP = 16;
-const OVERSCAN = 4;
+const OVERSCAN = 14;
 
 const STALE_MS = 30_000;
 
+const FILTER_LABELS: Record<StatusFilter, string> = {
+  ALL: "All",
+  UPCOMING: "Upcoming",
+  LIVE: "Live",
+  COMPLETED: "Completed",
+};
+
+const FILTER_DOT: Record<StatusFilter, string> = {
+  ALL: "bg-slate-400",
+  UPCOMING: "bg-rose-400",
+  LIVE: "bg-red-500 animate-pulse",
+  COMPLETED: "bg-slate-400",
+};
+
 export default function Matches() {
   const { matches, setMatches, loading, setLoading, lastFetched } = useMatchStore();
-  const [filter, setFilter] = useState<StatusFilter>("LIVE");
+  const [filter, setFilter] = useState<StatusFilter>("UPCOMING");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +50,14 @@ export default function Matches() {
   const filtered =
     filter === "ALL" ? matches : matches.filter((m) => m.status === filter);
 
+  const getFixtureBadge = (match: Match): string => {
+    if (match.status === "LIVE") return "LIVE";
+    return new Date(match.startTime).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+    });
+  };
+
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
@@ -41,14 +65,13 @@ export default function Matches() {
     overscan: OVERSCAN,
   });
 
-  const statusColors: Record<string, string> = {
-    UPCOMING: "bg-blue-500/20 text-blue-400",
-    LIVE: "bg-red-500/20 text-red-400",
-    COMPLETED: "bg-gray-500/20 text-gray-400",
-    CANCELLED: "bg-yellow-500/20 text-yellow-400",
+  const statusBadgeStyle: Record<string, string> = {
+    UPCOMING: "bg-rose-600 text-white",
+    LIVE: "bg-red-600 text-white",
+    COMPLETED: "bg-slate-700 text-white",
+    CANCELLED: "bg-yellow-600 text-white",
   };
 
-  /** IPL team brand colors for winner badge (bg + text) */
   const teamWinnerStyles: Record<string, string> = {
     RCB: "bg-red-600 text-white",
     SRH: "bg-orange-500 text-white",
@@ -65,101 +88,205 @@ export default function Matches() {
     teamWinnerStyles[shortName] ?? "bg-gray-500 text-white";
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="flex-shrink-0 space-y-4 pb-4">
-        <div>
-          <h1 className="text-3xl font-bold">Matches</h1>
-          <p className="text-gray-400 mt-1">Browse matches and pick your side.</p>
-        </div>
+    <div className="flex flex-col h-full min-h-0 bg-[#F8F9FC]">
 
-        <div className="flex gap-2">
-          {(["ALL", "UPCOMING", "LIVE", "COMPLETED"] as StatusFilter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                filter === f
-                  ? "bg-primary-600 text-white"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              {f === "ALL" ? "All" : f[0] + f.slice(1).toLowerCase()}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* ── Header: sticky to top of scroll area (layout mobile pt-0 + square card top = flush under app bar) ── */}
+      <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-100 bg-white px-4 py-5 shadow-[0_4px_20px_-6px_rgba(15,23,42,0.12)] sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          {/* Title */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-rose-500 mb-0.5">
+              Indian T20
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+              Official Fixtures
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">Browse matches and pick your side.</p>
+          </div>
 
-      {loading ? (
-        <p className="text-gray-500 text-sm flex-shrink-0">Loading matches...</p>
-      ) : filtered.length === 0 ? (
-        <div className="flex-shrink-0 bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <p className="text-gray-500 text-sm">No matches found.</p>
-        </div>
-      ) : (
-        <div
-          ref={scrollRef}
-          className="flex-1 min-h-0 overflow-auto"
-          style={{ contain: "strict" }}
-        >
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              width: "100%",
-              position: "relative",
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const match = filtered[virtualRow.index];
+          {/* Filter tabs — pushed right on sm+ */}
+          <div className="flex flex-wrap gap-1.5 sm:justify-end">
+            {(["ALL", "UPCOMING", "LIVE", "COMPLETED"] as StatusFilter[]).map((f) => {
+              const active = filter === f;
               return (
-                <Link
-                  key={match.id}
-                  to={`/matches/${match.id}`}
-                  className="absolute left-0 w-fit max-w-full pr-1"
-                  style={{
-                    top: 0,
-                    transform: `translateY(${virtualRow.start}px)`,
-                    height: `${virtualRow.size}px`,
-                  }}
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    active
+                      ? "bg-rose-600 text-white shadow-sm"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
                 >
-                  <div className="h-[calc(100%-16px)] w-fit max-w-full bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-gray-700 transition-colors flex flex-col min-w-0 overflow-hidden">
-                    <div className="flex items-center justify-between gap-2 min-w-0 flex-shrink-0">
-                      <div className="flex items-center gap-4">
-                        <div className="text-right w-24">
-                          <p className="font-bold">{match.homeTeam.shortName}</p>
-                          <p className="text-xs text-gray-500">{match.homeTeam.name}</p>
-                        </div>
-                        <div className="text-gray-500 text-sm font-medium px-3">VS</div>
-                        <div className="w-24">
-                          <p className="font-bold">{match.awayTeam.shortName}</p>
-                          <p className="text-xs text-gray-500">{match.awayTeam.name}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[match.status]}`}>
-                          {match.status}
-                        </span>
-                        <span className="text-sm text-gray-400">
-                          {new Date(match.startTime).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {match.winner && (
-                      <span
-                        className={`mt-3 inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getWinnerStyle(match.winner.shortName)}`}
-                        title={match.winner.name}
-                      >
-                        Winner: {match.winner.shortName ?? match.winner.name}
-                      </span>
-                    )}
-                  </div>
-                </Link>
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full ${
+                      active ? "bg-white/70" : FILTER_DOT[f]
+                    }`}
+                  />
+                  {FILTER_LABELS[f]}
+                </button>
               );
             })}
           </div>
         </div>
-      )}
+      </div>
+
+      {/* ── Content ─────────────────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 pt-4">
+        {loading ? (
+          <div className="space-y-3 pb-20">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className="animate-pulse rounded-3xl border border-slate-100 bg-white px-5 py-4 shadow-sm"
+              >
+                <div className="h-3 w-28 rounded bg-slate-100 mb-4 mx-auto" />
+                <div className="h-px bg-slate-100 mb-4" />
+                <div className="flex items-center justify-between">
+                  <div className="h-[86px] w-[86px] rounded-3xl bg-slate-100" />
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="h-4 w-8 rounded bg-slate-100" />
+                    <div className="h-8 w-[120px] rounded-2xl bg-slate-100" />
+                  </div>
+                  <div className="h-[86px] w-[86px] rounded-3xl bg-slate-100" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
+            <p className="text-slate-400 text-sm">No matches found.</p>
+          </div>
+        ) : (
+          <div
+            ref={scrollRef}
+            className="h-full overflow-auto pb-20"
+            style={{ contain: "strict" }}
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const match = filtered[virtualRow.index];
+                const homeLogoScale = getTeamLogoVisualScale(
+                  match.homeTeam.shortName,
+                  match.homeTeam.name
+                );
+                const awayLogoScale = getTeamLogoVisualScale(
+                  match.awayTeam.shortName,
+                  match.awayTeam.name
+                );
+                const homeLogo = getTeamLogo(match.homeTeam.shortName, match.homeTeam.name);
+                const awayLogo = getTeamLogo(match.awayTeam.shortName, match.awayTeam.name);
+
+                return (
+                  <Link
+                    key={match.id}
+                    to={`/matches/${match.id}`}
+                    className="absolute left-0 w-full"
+                    style={{
+                      top: 0,
+                      transform: `translateY(${virtualRow.start}px)`,
+                      height: `${virtualRow.size}px`,
+                    }}
+                  >
+                    <div className="group flex h-[calc(100%-16px)] flex-col rounded-3xl border border-slate-100 bg-white px-5 py-4 shadow-sm transition-all hover:border-rose-200 hover:shadow-md">
+
+                      {/* ── Match header ── */}
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">
+                          Indian T20 League
+                        </p>
+                        {match.winner && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${getWinnerStyle(match.winner.shortName)}`}
+                            title={match.winner.name}
+                          >
+                            <span aria-hidden>👑</span>
+                            {match.winner.shortName}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="h-px bg-slate-100 mb-3" />
+
+                      {/* ── Teams row ── */}
+                      <div className="flex items-center justify-between gap-3 flex-1">
+
+                        {/* Home team */}
+                        <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+                          <div className="flex h-[82px] w-[82px] items-center justify-center rounded-3xl border border-slate-100 bg-slate-50 p-2.5 shadow-sm transition-colors group-hover:border-slate-200">
+                            {homeLogo ? (
+                              <img
+                                src={homeLogo}
+                                alt={match.homeTeam.name}
+                                className="max-h-full max-w-full object-contain"
+                                style={{ transform: `scale(${homeLogoScale})` }}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <p className="font-extrabold text-sm text-slate-800">
+                                {match.homeTeam.shortName}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium truncate w-full text-center">
+                            {match.homeTeam.name}
+                          </p>
+                        </div>
+
+                        {/* VS + badge */}
+                        <div className="flex flex-col items-center gap-2 shrink-0">
+                          <p className="text-sm font-extrabold tracking-widest text-slate-400">VS</p>
+                          <span
+                            className={`inline-flex h-7 w-[92px] items-center justify-center rounded-2xl text-[11px] font-bold tracking-[0.03em] ${statusBadgeStyle[match.status]}`}
+                          >
+                            {match.status === "LIVE" && (
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/70 animate-pulse mr-1.5" />
+                            )}
+                            {getFixtureBadge(match)}
+                          </span>
+                          {match.winner && (
+                            <p className="text-[10px] text-slate-400 text-center">Winner declared</p>
+                          )}
+                        </div>
+
+                        {/* Away team */}
+                        <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+                          <div className="flex h-[82px] w-[82px] items-center justify-center rounded-3xl border border-slate-100 bg-slate-50 p-2.5 shadow-sm transition-colors group-hover:border-slate-200">
+                            {awayLogo ? (
+                              <TeamLogoImg
+                                src={awayLogo}
+                                alt={match.awayTeam.name}
+                                width={82}
+                                height={82}
+                                className="max-h-full max-w-full object-contain"
+                                style={{ transform: `scale(${awayLogoScale})` }}
+                              />
+                            ) : (
+                              <p className="font-extrabold text-sm text-slate-800">
+                                {match.awayTeam.shortName}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium truncate w-full text-center">
+                            {match.awayTeam.name}
+                          </p>
+                        </div>
+
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

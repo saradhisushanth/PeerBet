@@ -32,9 +32,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-gray-400 mt-1">
-          Welcome back, <span className="text-primary-400 font-semibold">{user?.username}</span>. Here's what's happening today.
+        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+        <p className="text-slate-500 mt-1">
+          Welcome back, <span className="text-primary-600 font-semibold">{user?.username}</span>. Here&apos;s what&apos;s happening today.
         </p>
       </div>
 
@@ -45,31 +45,31 @@ export default function Dashboard() {
           { label: "Active Bets", value: String(activeBets.length), color: "text-yellow-400" },
           { label: "Balance", value: formatCurrency(user?.balance ?? 0, 2), color: "text-green-400" },
         ].map((stat) => (
-          <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <p className="text-sm text-gray-400">{stat.label}</p>
+          <div key={stat.label} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+            <p className="text-sm text-slate-500">{stat.label}</p>
             <p className={`text-2xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">Upcoming Matches</h2>
         {upcomingMatches.length === 0 ? (
-          <p className="text-gray-500 text-sm">No upcoming matches right now.</p>
+          <p className="text-slate-500 text-sm">No upcoming matches right now.</p>
         ) : (
           <div className="space-y-3">
             {upcomingMatches.slice(0, 5).map((match) => (
               <Link
                 key={match.id}
                 to={`/matches/${match.id}`}
-                className="flex items-center justify-between p-4 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors"
+                className="flex items-center justify-between p-4 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <span className="font-semibold">{match.homeTeam.shortName}</span>
-                  <span className="text-gray-500 text-sm">vs</span>
+                  <span className="text-slate-500 text-sm">vs</span>
                   <span className="font-semibold">{match.awayTeam.shortName}</span>
                 </div>
-                <div className="text-sm text-gray-400">
+                <div className="text-sm text-slate-500">
                   {new Date(match.startTime).toLocaleDateString()}
                 </div>
               </Link>

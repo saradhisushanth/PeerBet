@@ -1,6 +1,10 @@
 /** Admin username — only this user can settle matches. Used by server (auth) and client (UI). */
 export const ADMIN_USERNAME = "Prem18";
 
+/** Username length bounds (register UI; align with server auth if validated there). */
+export const USERNAME_MIN_LENGTH = 2;
+export const USERNAME_MAX_LENGTH = 24;
+
 /** Minimum stake per bet (entry fee per match, in rupees). */
 export const MIN_STAKE = 50;
 

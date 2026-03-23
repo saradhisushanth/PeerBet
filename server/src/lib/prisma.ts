@@ -15,16 +15,49 @@ function findProjectRoot(dir: string): string {
 const projectRoot = findProjectRoot(__dirname);
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
-let connectionString = process.env.DATABASE_URL!;
-if (connectionString.includes("supabase") && !connectionString.includes("sslmode=")) {
-  connectionString += connectionString.includes("?") ? "&sslmode=require" : "?sslmode=require";
+function parseDatabaseUrl(raw: string) {
+  const trimmed = raw.trim().replace(/^["']|["']$/g, "");
+  const normalized = trimmed.replace(/^postgresql:/i, "http:").replace(/^postgres:/i, "http:");
+  const u = new URL(normalized);
+  const database = (u.pathname || "/postgres").replace(/^\//, "") || "postgres";
+  const port = u.port ? parseInt(u.port, 10) : 5432;
+  const safeDecode = (s: string) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+  return {
+    host: u.hostname,
+    port,
+    user: safeDecode(u.username),
+    password: safeDecode(u.password),
+    database,
+  };
 }
-const adapter = new PrismaPg({ connectionString });
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
-
-export const prisma = globalForPrisma.prisma || new PrismaClient({ adapter });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+const rawUrl = process.env.DATABASE_URL;
+if (!rawUrl) {
+  throw new Error(
+    "DATABASE_URL is missing. Add it to ipl-betting-app/.env (see .env.example)."
+  );
 }
+
+const pgConfig = parseDatabaseUrl(rawUrl);
+const isCloud =
+  pgConfig.host.includes("supabase") || pgConfig.host.includes("pooler.supabase.com");
+
+const adapter = new PrismaPg({
+  host: pgConfig.host,
+  port: pgConfig.port,
+  user: pgConfig.user,
+  password: pgConfig.password,
+  database: pgConfig.database,
+  ...(isCloud && {
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 30000,
+  }),
+} as ConstructorParameters<typeof PrismaPg>[0]);
+
+export const prisma = new PrismaClient({ adapter });
