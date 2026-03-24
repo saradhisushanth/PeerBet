@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Outlet, useNavigate, useLocation, NavLink } from "react-router-dom";
 import type { MatchUpdatePayload, WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
@@ -69,6 +69,16 @@ export default function Layout() {
     () => ({ setDesktopMatchSidebar }),
     []
   );
+
+  const desktopOutletScrollRef = useRef<HTMLDivElement>(null);
+  const desktopMatchSidebarScrollRef = useRef<HTMLDivElement>(null);
+  const mobileRouteScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    desktopOutletScrollRef.current?.scrollTo(0, 0);
+    desktopMatchSidebarScrollRef.current?.scrollTo(0, 0);
+    mobileRouteScrollRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
 
   // Refetch user when tab becomes visible
   useEffect(() => {
@@ -300,14 +310,20 @@ export default function Layout() {
         </div>
 
         {/* Center: Main Content */}
-        <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-auto shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
+        <div
+          ref={desktopOutletScrollRef}
+          className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-auto shadow-[0_8px_20px_rgba(15,23,42,0.05)]"
+        >
           <Outlet context={layoutOutletContext} />
         </div>
 
         {/* Right: Match results on match detail, else Account / Profile */}
         <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-hidden shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
           {isMatchDetailPath ? (
-            <div className="h-full min-h-0 overflow-auto overscroll-y-contain">
+            <div
+              ref={desktopMatchSidebarScrollRef}
+              className="h-full min-h-0 overflow-auto overscroll-y-contain"
+            >
               {desktopMatchSidebar ?? (
                 <p className="text-xs text-slate-500 text-center px-4 py-10">Loading match…</p>
               )}
@@ -328,7 +344,10 @@ export default function Layout() {
         onTouchEnd={handleTouchEnd}
       >
         {/* pt-0: no gap above route content; sticky headers (e.g. Board) sit flush under app bar */}
-          <div className="h-full min-h-0 overflow-auto overscroll-y-contain px-4 pb-4 pt-0 [-webkit-overflow-scrolling:touch]">
+          <div
+            ref={mobileRouteScrollRef}
+            className="h-full min-h-0 overflow-auto overscroll-y-contain px-4 pb-4 pt-0 [-webkit-overflow-scrolling:touch]"
+          >
           {/*
             h-full: Matches uses h-full + an inner overflow-auto virtualizer; parent must have definite height.
             Taller pages overflow this box; scroll height still grows on this overflow-auto wrapper.

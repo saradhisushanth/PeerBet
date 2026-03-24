@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMatchStore } from "../store/matchStore";
@@ -53,6 +53,11 @@ export default function MatchesPanel({ className = "" }: MatchesPanelProps) {
     // Larger overscan keeps rows (and logo <img> nodes) mounted longer → fewer decode flashes on scroll
     overscan: 14,
   });
+
+  useLayoutEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+    rowVirtualizer.scrollToOffset(0);
+  }, [filter, rowVirtualizer]);
 
   const getCountdown = (startTime: string): string => {
     const diffMs = new Date(startTime).getTime() - now;

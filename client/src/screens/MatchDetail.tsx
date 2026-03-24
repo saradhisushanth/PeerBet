@@ -125,7 +125,9 @@ function TeamPickCard({
   team, isSelected, momentum, playerCount, onSelect, disabled, align,
 }: {
   team: { id: string; shortName: string; name: string };
-  isSelected: boolean; momentum: number; playerCount: number;
+  isSelected: boolean;
+  momentum: number;
+  playerCount: number;
   onSelect: () => void; disabled: boolean;
   align: "left" | "right";
 }) {
@@ -174,16 +176,13 @@ function TeamPickCard({
       {/* Info */}
       <div className={`flex-1 min-w-0 ${isRight ? "text-right" : ""}`}>
         <p className="text-xl font-extrabold text-slate-900 leading-tight">{team.shortName}</p>
-        <p className="text-xs text-slate-400 mt-0.5 leading-snug">{team.name}</p>
-
-        {/* Support bar */}
-        <div className={`flex items-center gap-2 mt-2.5 ${isRight ? "flex-row-reverse" : ""}`}>
-          <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div className={`flex items-center gap-2 mt-2 ${isRight ? "flex-row-reverse" : ""}`}>
+          <div className="flex-1 h-2 min-w-0 rounded-full bg-slate-100 overflow-hidden">
             <div className={`h-full rounded-full transition-all duration-700 ${a.bar}`} style={{ width: `${momentum}%` }} />
           </div>
-          <span className="shrink-0 text-xs font-bold text-slate-700 tabular-nums">{momentum}%</span>
+          <span className="shrink-0 text-xs font-bold text-slate-600 tabular-nums w-9 sm:w-10 text-end">{momentum}%</span>
         </div>
-        <p className={`text-xs text-slate-400 mt-1 ${isRight ? "text-right" : ""}`}>
+        <p className={`text-xs text-slate-400 mt-1.5 ${isRight ? "text-right" : ""}`}>
           {playerCount} player{playerCount !== 1 ? "s" : ""}
         </p>
       </div>
@@ -581,9 +580,9 @@ export default function MatchDetail() {
     setInsuranceDialog({ open: false, want: false });
   }
 
+  const recentBets = summary?.recentBets ?? [];
   const momentumHome = summary?.momentum?.homePercent ?? 50;
   const momentumAway = summary?.momentum?.awayPercent ?? 50;
-  const recentBets = summary?.recentBets ?? [];
   const settlementResults = summary?.settlementResults ?? [];
   const isUserUndecided = !!user && (board?.undecided?.some(p => p.userId === user.id) ?? false);
   const consecutiveMissed = user?.consecutiveMissedMatches ?? 0;
@@ -687,11 +686,6 @@ export default function MatchDetail() {
               </div>
               <div className="min-w-0">
                 <p className="text-base sm:text-2xl font-extrabold text-slate-900 leading-tight">{home.shortName}</p>
-                <p className="text-[10px] text-slate-400 truncate">{home.name}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className={`inline-block h-1.5 rounded-full ${accent(home.shortName).bar}`} style={{ width: `${momentumHome * 0.6}px`, minWidth: "12px", maxWidth: "60px" }} />
-                  <span className="text-[8px] text-slate-400">{momentumHome}% support</span>
-                </div>
               </div>
             </div>
 
@@ -734,19 +728,14 @@ export default function MatchDetail() {
               </div>
               <div className="min-w-0 text-right">
                 <p className="text-base sm:text-2xl font-extrabold text-slate-900 leading-tight">{away.shortName}</p>
-                <p className="text-[10px] text-slate-400 truncate">{away.name}</p>
-                <div className="flex items-center gap-1.5 mt-1 justify-end">
-                  <span className="text-[10px] text-slate-400">{momentumAway}% support</span>
-                  <span className={`inline-block h-1.5 rounded-full ${accent(away.shortName).bar}`} style={{ width: `${momentumAway * 0.6}px`, minWidth: "12px", maxWidth: "60px" }} />
-                </div>
               </div>
             </div>
           </div>
 
-          {/* Momentum bar */}
+          {/* Pool support split — bar width reflects backing % (short names only in header row) */}
           <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100 shadow-inner">
-            <div className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`} style={{ width: `${momentumHome}%` }} />
-            <div className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`} style={{ width: `${momentumAway}%` }} />
+            <div className={`h-full min-w-0 transition-all duration-700 ${accent(home.shortName).bar}`} style={{ width: `${momentumHome}%` }} />
+            <div className={`h-full min-w-0 transition-all duration-700 ${accent(away.shortName).bar}`} style={{ width: `${momentumAway}%` }} />
           </div>
         </div>
       </div>
@@ -808,7 +797,8 @@ export default function MatchDetail() {
               <TeamPickCard
                 team={{ id: board.homeTeam.id, shortName: board.homeTeam.shortName, name: board.homeTeam.name }}
                 isSelected={userBetTeamId === board.homeTeam.id}
-                momentum={momentumHome} playerCount={board.onHome.length}
+                momentum={momentumHome}
+                playerCount={board.onHome.length}
                 onSelect={async () => { const amt = clampStake(); await placeBet(board.homeTeam.id, amt); }}
                 disabled={placing || maxStake < MIN_STAKE}
                 align="left"
@@ -816,7 +806,8 @@ export default function MatchDetail() {
               <TeamPickCard
                 team={{ id: board.awayTeam.id, shortName: board.awayTeam.shortName, name: board.awayTeam.name }}
                 isSelected={userBetTeamId === board.awayTeam.id}
-                momentum={momentumAway} playerCount={board.onAway.length}
+                momentum={momentumAway}
+                playerCount={board.onAway.length}
                 onSelect={async () => { const amt = clampStake(); await placeBet(board.awayTeam.id, amt); }}
                 disabled={placing || maxStake < MIN_STAKE}
                 align="right"
@@ -863,7 +854,7 @@ export default function MatchDetail() {
                 winnerTeamId={selectedMatch.winner?.id ?? null}
               />
               <div className={`rounded-2xl border border-slate-100 bg-white px-3 py-3 ${CARD_SHADOW_STATIC}`}>
-                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                <div className="flex justify-between text-[10px] font-semibold text-slate-500 tabular-nums mb-1.5">
                   <span>
                     {board.homeTeam.shortName} {momentumHome}%
                   </span>
@@ -873,11 +864,11 @@ export default function MatchDetail() {
                 </div>
                 <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`}
+                    className={`h-full min-w-0 transition-all duration-700 ${accent(home.shortName).bar}`}
                     style={{ width: `${momentumHome}%` }}
                   />
                   <div
-                    className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`}
+                    className={`h-full min-w-0 transition-all duration-700 ${accent(away.shortName).bar}`}
                     style={{ width: `${momentumAway}%` }}
                   />
                 </div>

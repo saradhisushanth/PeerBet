@@ -1,8 +1,9 @@
+import { useLayoutEffect, useRef } from "react";
 import { useAuthStore } from "../store/authStore";
 import { useMatchStore } from "../store/matchStore";
 import { useBetStore } from "../store/betStore";
 import { formatCurrency, formatPrizePool } from "../utils/format";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 interface ProfilePanelProps {
   className?: string;
@@ -12,6 +13,12 @@ export default function ProfilePanel({ className = "" }: ProfilePanelProps) {
   const user = useAuthStore((s) => s.user);
   const { matches } = useMatchStore();
   const { bets } = useBetStore();
+  const location = useLocation();
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    scrollRootRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const liveMatches = matches.filter((m) => m.status === "LIVE");
   const upcomingMatches = matches.filter((m) => m.status === "UPCOMING");
@@ -19,7 +26,7 @@ export default function ProfilePanel({ className = "" }: ProfilePanelProps) {
   const winnings = Math.max(0, (user?.balance ?? 1000) - 1000);
 
   return (
-    <div className={`flex flex-col h-full min-h-0 overflow-auto ${className}`}>
+    <div ref={scrollRootRef} className={`flex flex-col h-full min-h-0 overflow-auto ${className}`}>
       <div className="flex-shrink-0 px-4 py-4 space-y-4">
         <div>
           <h2 className="text-xl font-bold">Account</h2>
