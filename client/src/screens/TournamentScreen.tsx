@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../services/api";
 import { formatCurrency, formatNumber, formatPrizePool } from "../utils/format";
-import { ADMIN_USERNAME } from "@shared/constants";
+import { getClientAdminUsername } from "../lib/clientAdminUsername";
 
 type Details = Awaited<ReturnType<typeof api.tournament.getDetails>>;
 
@@ -49,7 +49,7 @@ export default function TournamentScreen() {
   const [topUpSubmitting, setTopUpSubmitting] = useState(false);
   const retryCountRef = useRef(0);
 
-  const isAdmin = user?.username === ADMIN_USERNAME;
+  const isAdmin = user?.username === getClientAdminUsername();
 
   const fetchDetails = useCallback((autoRetry = false) => {
     let cancelled = false;

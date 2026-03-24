@@ -1,12 +1,15 @@
 import { prisma } from "../lib/prisma.js";
 import {
   INSURANCE_REFUND_PERCENT,
-  UNDERDOG_MULTIPLIER,
   STREAK_BONUS,
   MISSED_MATCH_PENALTY,
   SOLO_WIN_BONUS_MULTIPLIER,
   SOLO_LOSS_REFUND_PERCENT,
 } from "../../../shared/constants.js";
+import {
+  getUnderdogTeamIdByStake,
+  underdogProfitMultiplier,
+} from "../../../shared/settlementMath.js";
 
 export const settlementService = {
   async settleMatch(matchId: string, winnerTeamId: string) {
@@ -33,21 +36,15 @@ export const settlementService = {
 
     const homeBets = bets.filter((b: BetItem) => b.selectedTeamId === match.homeTeamId);
     const awayBets = bets.filter((b: BetItem) => b.selectedTeamId === match.awayTeamId);
-    const homePlayerCount = homeBets.length;
-    const awayPlayerCount = awayBets.length;
     const homeStake = homeBets.reduce((s: number, b: BetItem) => s + b.amount, 0);
     const awayStake = awayBets.reduce((s: number, b: BetItem) => s + b.amount, 0);
-    // Underdog = fewer players; if tied, less total stake; if equal players and equal stake, away
-    const underdogTeamId =
-      homePlayerCount < awayPlayerCount
-        ? match.homeTeamId
-        : awayPlayerCount < homePlayerCount
-          ? match.awayTeamId
-          : homeStake < awayStake
-            ? match.homeTeamId
-            : awayStake < homeStake
-              ? match.awayTeamId
-              : match.awayTeamId; // equal players and equal stake
+    const underdogTeamId = getUnderdogTeamIdByStake(
+      homeStake,
+      awayStake,
+      match.homeTeamId,
+      match.awayTeamId,
+    );
+    const underdogPoolMultiplier = underdogProfitMultiplier(homeStake, awayStake);
 
     const participantIds = new Set(bets.map((b: BetItem) => b.userId));
     const isSoloMatch = participantIds.size === 1;
@@ -69,13 +66,19 @@ export const settlementService = {
 
       let underdogBonusAmount = 0;
       if (won) {
-        const poolShare = totalWinningStake > 0 ? (bet.amount / totalWinningStake) * losingPool : 0;
-        const isUnderdogWinner = bet.selectedTeamId === underdogTeamId;
-        const adjustedPoolShare = isUnderdogWinner ? poolShare * UNDERDOG_MULTIPLIER : poolShare;
-        if (isUnderdogWinner && poolShare > 0) {
-          underdogBonusAmount = round2(poolShare * (UNDERDOG_MULTIPLIER - 1));
+        const baseProfit =
+          totalWinningStake > 0
+            ? round2((bet.amount / totalWinningStake) * losingPool)
+            : 0;
+        const winningSideIsUnderdog = winnerTeamId === underdogTeamId;
+        const finalProfitFromPool =
+          winningSideIsUnderdog && baseProfit > 0
+            ? round2(baseProfit * underdogPoolMultiplier)
+            : baseProfit;
+        if (winningSideIsUnderdog && baseProfit > 0) {
+          underdogBonusAmount = round2(finalProfitFromPool - baseProfit);
         }
-        payout = bet.amount + adjustedPoolShare;
+        payout = bet.amount + finalProfitFromPool;
 
         const currentStreak = await getConsecutiveWins(bet.userId);
         const newStreak = currentStreak + 1;

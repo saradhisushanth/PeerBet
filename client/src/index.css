@@ -6,10 +6,25 @@
   /* Keep native date/time/number pickers in light chrome even when OS prefers dark */
   html {
     color-scheme: light;
+    /* With viewport user-scalable=no: reinforce no double-tap zoom; pinch is controlled by meta */
+    touch-action: manipulation;
+    height: 100%;
   }
 
   body {
     @apply bg-slate-100 text-slate-900 antialiased;
+    touch-action: manipulation;
+    height: 100%;
+    margin: 0;
+    /* Single scrollport inside Layout / login — avoids mobile browser moving chrome with document scroll */
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
+    max-height: 100dvh;
+    overflow: hidden;
+    min-height: 0;
   }
 
   /*

@@ -280,7 +280,10 @@ export default function MyBets() {
                           </span>
                         </span>
                         <span className="text-slate-300 hidden sm:inline">·</span>
-                        <span className="text-sm text-slate-500">
+                        <span
+                          className="text-sm text-slate-500"
+                          title="Parimutuel pool: 1 + (other side total ÷ your side total) if your pick wins — raw pool ratio only; underdog extra is added at settlement, not in this figure."
+                        >
                           Odds:{" "}
                           <span className="font-semibold text-slate-800">{bet.oddsMultiplier}×</span>
                         </span>

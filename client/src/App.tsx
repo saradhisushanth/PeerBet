@@ -15,6 +15,7 @@ export default function App() {
   const token = useAuthStore((s) => s.token);
 
   return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
     <Routes>
       <Route
         path="/login"
@@ -36,5 +37,6 @@ export default function App() {
         </Route>
       </Route>
     </Routes>
+    </div>
   );
 }

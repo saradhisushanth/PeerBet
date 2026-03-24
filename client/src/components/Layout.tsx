@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Outlet, useNavigate, useLocation, NavLink } from "react-router-dom";
 import type { MatchUpdatePayload, WalletTopUpPayload } from "@shared/types";
 import { useAuthStore } from "../store/authStore";
@@ -20,10 +20,16 @@ const desktopTabs = [
   { to: "/stats", label: "Profile" },
 ] as const;
 
+export type LayoutOutletContext = {
+  setDesktopMatchSidebar: (node: ReactNode | null) => void;
+};
+
 export default function Layout() {
   const { user, logout, updateUser, token, balanceDisplayOffset } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [desktopMatchSidebar, setDesktopMatchSidebar] = useState<ReactNode>(null);
+  const isMatchDetailPath = location.pathname.startsWith("/matches/");
   const [topUpSnack, setTopUpSnack] = useState<number | null>(null);
   const [insuranceRefundSnack, setInsuranceRefundSnack] = useState<number | null>(null);
   const [soloWinSnack, setSoloWinSnack] = useState<number | null>(null);
@@ -54,6 +60,15 @@ export default function Layout() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (!isMatchDetailPath) setDesktopMatchSidebar(null);
+  }, [isMatchDetailPath]);
+
+  const layoutOutletContext = useMemo<LayoutOutletContext>(
+    () => ({ setDesktopMatchSidebar }),
+    []
+  );
 
   // Refetch user when tab becomes visible
   useEffect(() => {
@@ -109,6 +124,15 @@ export default function Layout() {
   useSocketEvent("matchUpdate", onMatchUpdate);
 
   const mobileSwipeRoutes = desktopTabs.map((tab) => tab.to);
+  const showAppBackNav = location.pathname !== "/";
+
+  function handleAppBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/");
+    }
+  }
 
   // Swipe handling for mobile: move across primary routes instead of hidden side panels.
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -164,12 +188,42 @@ export default function Layout() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-slate-100 text-slate-900">
-      {/* Header */}
-      <header className="flex-shrink-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-slate-100 text-slate-900">
+      {/* Header — fixed on mobile so it stays pinned to the visual viewport while inner content scrolls */}
+      <header
+        className={`z-50 border-b border-slate-200 bg-white ${
+          isDesktopViewport
+            ? "relative flex-shrink-0"
+            : "fixed top-0 left-0 right-0 shrink-0 pt-[env(safe-area-inset-top,0px)] [transform:translateZ(0)]"
+        }`}
+      >
         <div className="px-4 h-12 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            {showAppBackNav && (
+              <button
+                type="button"
+                onClick={handleAppBack}
+                className="shrink-0 inline-flex items-center justify-center gap-1 h-8 pl-2 pr-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors text-xs font-semibold"
+                aria-label="Go back"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span className="hidden sm:inline">Back</span>
+              </button>
+            )}
+            <div className="h-8 w-8 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
               <img
                 src="/brand-logo.png"
                 alt="PeerBet"
@@ -229,6 +283,14 @@ export default function Layout() {
         </div>
       </header>
 
+      {!isDesktopViewport && (
+        <div
+          className="shrink-0 w-full pointer-events-none"
+          style={{ height: "calc(3rem + env(safe-area-inset-top, 0px))" }}
+          aria-hidden
+        />
+      )}
+
       {/* Desktop/tablet layout */}
       {isDesktopViewport && (
       <div className="lg:grid lg:grid-cols-[270px_1fr_280px] xl:grid-cols-[320px_1fr_300px] flex-1 min-h-0 overflow-hidden gap-3 xl:gap-4 p-3 xl:p-4">
@@ -239,12 +301,20 @@ export default function Layout() {
 
         {/* Center: Main Content */}
         <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-auto shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
-          <Outlet />
+          <Outlet context={layoutOutletContext} />
         </div>
 
-        {/* Right: Profile Panel */}
+        {/* Right: Match results on match detail, else Account / Profile */}
         <div className="min-h-0 rounded-xl border border-slate-100 bg-white overflow-hidden shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
-          <ProfilePanel />
+          {isMatchDetailPath ? (
+            <div className="h-full min-h-0 overflow-auto overscroll-y-contain">
+              {desktopMatchSidebar ?? (
+                <p className="text-xs text-slate-500 text-center px-4 py-10">Loading match…</p>
+              )}
+            </div>
+          ) : (
+            <ProfilePanel />
+          )}
         </div>
       </div>
       )}
@@ -258,13 +328,13 @@ export default function Layout() {
         onTouchEnd={handleTouchEnd}
       >
         {/* pt-0: no gap above route content; sticky headers (e.g. Board) sit flush under app bar */}
-        <div className="h-full min-h-0 overflow-auto px-4 pb-4 pt-0">
+          <div className="h-full min-h-0 overflow-auto overscroll-y-contain px-4 pb-4 pt-0 [-webkit-overflow-scrolling:touch]">
           {/*
             h-full: Matches uses h-full + an inner overflow-auto virtualizer; parent must have definite height.
             Taller pages overflow this box; scroll height still grows on this overflow-auto wrapper.
           */}
           <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm max-lg:rounded-t-none max-lg:rounded-b-2xl">
-            <Outlet />
+            <Outlet context={layoutOutletContext} />
           </div>
         </div>
       </div>

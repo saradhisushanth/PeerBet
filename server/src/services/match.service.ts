@@ -1,6 +1,9 @@
 import { prisma } from "../lib/prisma.js";
 import { rebalanceMatchIfLocked } from "./lockRebalance.service.js";
-import { UNDERDOG_MULTIPLIER } from "../../../shared/constants.js";
+import {
+  getUnderdogTeamIdByStake,
+  underdogProfitMultiplier,
+} from "../../../shared/settlementMath.js";
 
 export const matchService = {
   async getAll() {
@@ -123,16 +126,15 @@ export const matchService = {
 
       const homeBets = settledBets.filter((b: SettledBet) => b.selectedTeamId === match.homeTeamId);
       const awayBets = settledBets.filter((b: SettledBet) => b.selectedTeamId === match.awayTeamId);
-      const homePlayerCount = homeBets.length;
-      const awayPlayerCount = awayBets.length;
       const homeTotal = homeBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
       const awayTotal = awayBets.reduce((s: number, b: SettledBet) => s + b.amount, 0);
-      const underdogTeamId =
-        homePlayerCount < awayPlayerCount ? match.homeTeamId
-        : awayPlayerCount < homePlayerCount ? match.awayTeamId
-        : homeTotal < awayTotal ? match.homeTeamId
-        : awayTotal < homeTotal ? match.awayTeamId
-        : match.awayTeamId;
+      const underdogTeamId = getUnderdogTeamIdByStake(
+        homeTotal,
+        awayTotal,
+        match.homeTeamId,
+        match.awayTeamId,
+      );
+      const underdogPoolMultiplier = underdogProfitMultiplier(homeTotal, awayTotal);
       const underdogSide = underdogTeamId === match.homeTeamId ? match.homeTeam.shortName : match.awayTeam.shortName;
 
       settlementMeta = { totalPool: fullPool, losingPool: losePool, totalWinningStake: totalWinStake, underdogSide };
@@ -150,9 +152,13 @@ export const matchService = {
           let underdogBonusAmt: number | undefined;
           if (won && totalWinStake > 0) {
             const rawShare = round2((stake / totalWinStake) * losePool);
-            const isUnderdog = b.selectedTeamId === underdogTeamId;
+            const winningSideIsUnderdog =
+              winnerTeamId != null && winnerTeamId === underdogTeamId;
             basePoolShare = rawShare;
-            underdogBonusAmt = isUnderdog ? round2(rawShare * (UNDERDOG_MULTIPLIER - 1)) : 0;
+            underdogBonusAmt =
+              winningSideIsUnderdog && rawShare > 0
+                ? round2(rawShare * (underdogPoolMultiplier - 1))
+                : 0;
           }
 
           return {

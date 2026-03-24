@@ -159,7 +159,7 @@ export default function LeaderboardScreen() {
   }, [setEntries, setLoading, lastFetched, entries.length]);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FC] pb-24 md:pb-36">
+    <div className="min-h-full bg-[#F8F9FC] pb-24 md:pb-36">
       <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -177,7 +177,7 @@ export default function LeaderboardScreen() {
             <div className="flex flex-wrap gap-3 text-xs text-slate-500 sm:text-right">
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                Underdog 1.3× bonus on winning minority side
+                Dynamic underdog bonus (lower stake side; tie → away)
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-2 h-2 rounded-full bg-red-400 shrink-0" />
@@ -194,7 +194,7 @@ export default function LeaderboardScreen() {
             Swipe sideways for stats — <span className="font-semibold text-slate-600">Rank &amp; Player stay fixed.</span>
           </p>
           <div
-            className="relative isolate overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]"
+            className="relative isolate overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
             data-prevent-route-swipe="true"
             role="table"
             aria-label="Leaderboard"
@@ -254,7 +254,7 @@ export default function LeaderboardScreen() {
 
           <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-b-2xl border-t border-slate-100 px-5 py-3 text-[11px] text-slate-400">
             <span>Balance = entry + top-ups + profit − missed penalties</span>
-            <span>* Underdog: 1.3× share of losing pool when winning on minority side</span>
+            <span>* Underdog: extra on base pool profit when the winning side had lower total stake (1.1× if tied; else scaled by stake ratio)</span>
             <span>Profit = betting gains/losses only</span>
           </div>
         </div>

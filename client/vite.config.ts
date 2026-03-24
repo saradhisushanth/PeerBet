@@ -9,6 +9,8 @@ export default defineConfig(({ mode }) => {
   const apiTarget = `http://127.0.0.1:${env.PORT || "3001"}`;
 
   return {
+    envDir: repoRoot,
+    envPrefix: ["VITE_", "ADMIN_"],
     plugins: [react()],
     resolve: {
       alias: {
