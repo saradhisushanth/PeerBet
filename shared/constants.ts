@@ -1,4 +1,4 @@
-/** Admin username — only this user can settle matches. Used by server (auth) and client (UI). */
+/** Fallback admin username when `ADMIN_USERNAME` is unset in `.env` (server + Vite client both prefer env). */
 export const ADMIN_USERNAME = "Prem18";
 
 /** Username length bounds (register UI; align with server auth if validated there). */

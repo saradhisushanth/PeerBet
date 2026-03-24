@@ -8,9 +8,10 @@ import { useSocketEvent } from "../hooks/useSocket";
 import { joinMatchRoom, leaveMatchRoom } from "../services/socket";
 import { api } from "../services/api";
 import {
-  ADMIN_USERNAME, MIN_STAKE, MAX_STAKE, INSURANCE_COST,
+  MIN_STAKE, MAX_STAKE, INSURANCE_COST,
   INSURANCE_REFUND_PERCENT, TOSS_DEFAULT_MINUTES_BEFORE_MATCH,
 } from "@shared/constants";
+import { getClientAdminUsername } from "../lib/clientAdminUsername";
 import PlayerBettingBoard from "../components/PlayerBettingBoard";
 import TeamLogoImg from "../components/TeamLogoImg";
 import ProfitBreakdown from "../components/ProfitBreakdown";
@@ -508,7 +509,7 @@ export default function MatchDetail() {
   const home = selectedMatch.homeTeam, away = selectedMatch.awayTeam;
   const isUpcoming = selectedMatch.status === "UPCOMING";
   const bettingOpen = isUpcoming && countdown > 0;
-  const isAdmin = user?.username === ADMIN_USERNAME;
+  const isAdmin = user?.username === getClientAdminUsername();
   const canSettle = !selectedMatch.winner && (isUpcoming || selectedMatch.status === "LIVE");
   const totalPool = summary?.totalPool ?? 0;
   const presentPool = Number(totalPool) - myStakeExclForPoolCap;

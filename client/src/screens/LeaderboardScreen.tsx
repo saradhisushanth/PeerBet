@@ -159,7 +159,7 @@ export default function LeaderboardScreen() {
   }, [setEntries, setLoading, lastFetched, entries.length]);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FC] pb-24 md:pb-36">
+    <div className="min-h-full bg-[#F8F9FC] pb-24 md:pb-36">
       <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-10 py-7 mb-6">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -194,7 +194,7 @@ export default function LeaderboardScreen() {
             Swipe sideways for stats — <span className="font-semibold text-slate-600">Rank &amp; Player stay fixed.</span>
           </p>
           <div
-            className="relative isolate overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]"
+            className="relative isolate overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
             data-prevent-route-swipe="true"
             role="table"
             aria-label="Leaderboard"
