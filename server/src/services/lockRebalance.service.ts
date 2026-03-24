@@ -5,9 +5,8 @@
  */
 import type { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { refreshOddsMultipliersForPendingMatchTx } from "../lib/matchPoolOdds.js";
 import { TOSS_DEFAULT_MINUTES_BEFORE_MATCH } from "../../../shared/constants.js";
-
-const FIXED_ODDS = 2;
 
 function getBettingClosesAt(startTime: Date, tossTime: Date | null | undefined): Date {
   if (tossTime != null) return tossTime as Date;
@@ -102,12 +101,18 @@ export async function rebalanceMatchIfLocked(matchId: string): Promise<void> {
           matchId,
           selectedTeamId: otherSideTeamId,
           amount: p.amount,
-          oddsMultiplier: FIXED_ODDS,
+          oddsMultiplier: 1,
           insured: p.insured,
           status: "PENDING",
         },
       });
     }
+    await refreshOddsMultipliersForPendingMatchTx(
+      tx,
+      matchId,
+      match.homeTeamId,
+      match.awayTeamId,
+    );
     await tx.match.update({ where: { id: matchId }, data: { bettingLockedAt: now } });
   });
 }
@@ -185,12 +190,18 @@ export async function forceRebalanceMatch(matchId: string): Promise<boolean> {
           matchId,
           selectedTeamId: otherSideTeamId,
           amount: p.amount,
-          oddsMultiplier: FIXED_ODDS,
+          oddsMultiplier: 1,
           insured: p.insured,
           status: "PENDING",
         },
       });
     }
+    await refreshOddsMultipliersForPendingMatchTx(
+      tx,
+      matchId,
+      match.homeTeamId,
+      match.awayTeamId,
+    );
     await tx.match.update({ where: { id: matchId }, data: { bettingLockedAt: now } });
   });
   return true;

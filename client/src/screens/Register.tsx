@@ -31,7 +31,7 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-y-contain items-center justify-center bg-slate-100 px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center font-bold text-lg mx-auto mb-4">

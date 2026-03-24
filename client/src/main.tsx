@@ -10,7 +10,9 @@ prefetchAllTeamLogos();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <App />
+      </div>
     </BrowserRouter>
   </StrictMode>
 );

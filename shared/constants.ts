@@ -21,8 +21,14 @@ export const MISSED_MATCH_PENALTY = 50;
 export const INSURANCE_COST = 200;
 export const INSURANCE_REFUND_PERCENT = 50;
 
-/** Underdog = side with less total stake; winners on that side get this multiplier on their pool share. */
-export const UNDERDOG_MULTIPLIER = 1.3;
+/**
+ * Underdog = side with lower **total stake** (not player count). If stakes tie, away is the underdog side.
+ * Winners on the underdog side multiply **base profit** by `underdogProfitMultiplier(homeStake, awayStake)`:
+ * equal stakes → this constant; else `1 + UNDERDOG_RATIO_BLEND × (ratio − 1) / ratio`, ratio = max/min.
+ */
+export const EQUAL_STAKE_UNDERDOG_MULTIPLIER = 1.1;
+/** Blend `k` in dynamic multiplier: 1 + k × (ratio − 1) / ratio when stakes are unequal. */
+export const UNDERDOG_RATIO_BLEND = 0.5;
 
 /** Streak bonus (coins) for consecutive wins: 2→100, 3→200, 4→400, 5→800. */
 export const STREAK_BONUS: Record<number, number> = {

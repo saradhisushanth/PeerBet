@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams } from "react-router-dom";
+import { useParams, useOutletContext } from "react-router-dom";
 import { useMatchStore, type Match, type MatchSummary as MatchSummaryType } from "../store/matchStore";
 import { useAuthStore } from "../store/authStore";
 import { useBetStore, type Bet } from "../store/betStore";
@@ -14,7 +14,8 @@ import {
 import { getClientAdminUsername } from "../lib/clientAdminUsername";
 import PlayerBettingBoard from "../components/PlayerBettingBoard";
 import TeamLogoImg from "../components/TeamLogoImg";
-import ProfitBreakdown from "../components/ProfitBreakdown";
+import MatchResultsPanel from "../components/MatchResultsPanel";
+import type { LayoutOutletContext } from "../components/Layout";
 import { formatCurrency } from "../utils/format";
 import { getTeamLogo, getTeamLogoVisualScale } from "../utils/teamLogos";
 import type { BetPlacedPayload, MatchUpdatePayload } from "@shared/types";
@@ -493,6 +494,28 @@ export default function MatchDetail() {
     setInsured(myBetInsured);
   }, [user?.id, myBetAmount, myBetInsured]);
 
+  const { setDesktopMatchSidebar } = useOutletContext<LayoutOutletContext>();
+
+  useLayoutEffect(() => {
+    if (!setDesktopMatchSidebar) return;
+    if (!selectedMatch) {
+      setDesktopMatchSidebar(
+        <p className="text-xs text-slate-500 text-center px-4 py-10">Loading match…</p>
+      );
+      return () => setDesktopMatchSidebar(null);
+    }
+    const rows = summary?.settlementResults ?? [];
+    setDesktopMatchSidebar(
+      <MatchResultsPanel
+        matchStatus={selectedMatch.status}
+        settlementResults={rows}
+        user={user ? { id: user.id, username: user.username } : null}
+        settlementMeta={summary?.settlementMeta ?? null}
+      />
+    );
+    return () => setDesktopMatchSidebar(null);
+  }, [setDesktopMatchSidebar, selectedMatch, summary, user]);
+
   /* ── loading state ── */
   if (!selectedMatch) {
     return (
@@ -599,12 +622,9 @@ export default function MatchDetail() {
     <div className="min-h-screen bg-[#F8F9FC]">
 
       {/* ══ STICKY HEADER ══════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/95 backdrop-blur-md shadow-[0_6px_28px_-4px_rgba(15,23,42,0.14)] supports-[backdrop-filter]:bg-white/90">
+      <header className="sticky top-0 z-40 border-b border-slate-100 bg-white shadow-[0_6px_28px_-4px_rgba(15,23,42,0.14)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 py-3">
-            <Link to="/" className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            </Link>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.05em] text-rose-500 leading-none mb-0.5">Indian T20 · Match Detail</p>
               <h1 className="text-sm sm:text-base font-extrabold text-slate-900 truncate leading-tight">
@@ -823,6 +843,53 @@ export default function MatchDetail() {
           </div>
         )}
 
+        {/* Mobile / vertical stack: drag-and-drop board directly under Choose Your Side */}
+        <div className="lg:hidden space-y-3">
+          {board ? (
+            <>
+              <PlayerBettingBoard
+                embeddedBelowTeamPick
+                board={board}
+                currentUserId={user?.id ?? null}
+                stake={stake}
+                onPlaceBet={async (teamId, amount) => {
+                  await placeBet(teamId, amount);
+                }}
+                onCancelBet={cancelBet}
+                placing={placing}
+                isUpcoming={isUpcoming}
+                bettingOpen={bettingOpen}
+                canAffordBet={maxStake >= MIN_STAKE}
+                winnerTeamId={selectedMatch.winner?.id ?? null}
+              />
+              <div className={`rounded-2xl border border-slate-100 bg-white px-3 py-3 ${CARD_SHADOW_STATIC}`}>
+                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                  <span>
+                    {board.homeTeam.shortName} {momentumHome}%
+                  </span>
+                  <span>
+                    {momentumAway}% {board.awayTeam.shortName}
+                  </span>
+                </div>
+                <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`}
+                    style={{ width: `${momentumHome}%` }}
+                  />
+                  <div
+                    className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`}
+                    style={{ width: `${momentumAway}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className={`flex animate-pulse items-center justify-center rounded-2xl border border-slate-100 bg-white p-10 text-sm text-slate-400 ${CARD_SHADOW_STATIC}`}>
+              Loading board…
+            </div>
+          )}
+        </div>
+
         {/* ── RESPONSIVE GRID: stacks on mobile, 3-col on lg ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
@@ -904,83 +971,16 @@ export default function MatchDetail() {
             )}
           </section>
 
-          {/* Mobile: same DnD board as desktop (was read-only grid — drag never existed here) */}
-          <section className="lg:hidden space-y-3">
-            {board ? (
-              <>
-                <PlayerBettingBoard
-                  board={board}
-                  currentUserId={user?.id ?? null}
-                  stake={stake}
-                  onPlaceBet={async (teamId, amount) => {
-                    await placeBet(teamId, amount);
-                  }}
-                  onCancelBet={cancelBet}
-                  placing={placing}
-                  isUpcoming={isUpcoming}
-                  bettingOpen={bettingOpen}
-                  canAffordBet={maxStake >= MIN_STAKE}
-                  winnerTeamId={selectedMatch.winner?.id ?? null}
-                />
-                <div className={`rounded-2xl border border-slate-100 bg-white px-3 py-3 ${CARD_SHADOW_STATIC}`}>
-                  <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                    <span>
-                      {board.homeTeam.shortName} {momentumHome}%
-                    </span>
-                    <span>
-                      {momentumAway}% {board.awayTeam.shortName}
-                    </span>
-                  </div>
-                  <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={`h-full transition-all duration-700 ${accent(home.shortName).bar}`}
-                      style={{ width: `${momentumHome}%` }}
-                    />
-                    <div
-                      className={`h-full transition-all duration-700 ${accent(away.shortName).bar}`}
-                      style={{ width: `${momentumAway}%` }}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className={`flex animate-pulse items-center justify-center rounded-2xl border border-slate-100 bg-white p-10 text-sm text-slate-400 ${CARD_SHADOW_STATIC}`}>
-                Loading board…
-              </div>
-            )}
-          </section>
-
-          {/* ── RIGHT: Results + Admin ── */}
+          {/* ── RIGHT: Match results (mobile/tablet — desktop uses Layout sidebar) + Admin ── */}
           <aside className="lg:col-span-3 space-y-4">
-            <div className={`overflow-hidden rounded-2xl border border-slate-100 bg-white ${CARD_SHADOW_STATIC}`}>
-              <div className="border-b border-slate-100 px-5 py-4">
-                <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400 font-semibold">Match Results</p>
-              </div>
-              <div className="divide-y divide-slate-50">
-                <div className="px-5 py-2 grid grid-cols-[1fr_auto_auto] gap-x-3 text-[10px] uppercase tracking-wide text-slate-400 font-semibold">
-                  <span>Player</span><span className="text-right">Profit</span><span className="text-right">Streak</span>
-                </div>
-                {settlementResults.map(r => (
-                  <div key={r.userId} className={`px-5 py-3 grid grid-cols-[1fr_auto_auto] gap-x-3 items-center ${r.userId === user?.id ? "bg-rose-50/60" : ""}`}>
-                    <div className="min-w-0">
-                      <p className={`text-xs font-semibold truncate ${r.userId === user?.id ? "text-rose-600" : "text-slate-800"}`}>{r.username}{r.userId === user?.id && <span className="text-[10px] ml-1 opacity-70">(you)</span>}</p>
-                      <p className="text-[10px] text-slate-400">{r.side}</p>
-                    </div>
-                    <span className={`text-xs font-bold tabular-nums ${r.poolGained >= 0 ? "text-emerald-600" : "text-red-500"}`}>{r.poolGained >= 0 ? "+" : ""}{formatCurrency(r.poolGained, 2)}</span>
-                    <span className="text-xs text-slate-500 tabular-nums">{r.winningStreakAfter != null ? `🔥${r.winningStreakAfter}` : "—"}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="lg:hidden">
+              <MatchResultsPanel
+                matchStatus={selectedMatch.status}
+                settlementResults={settlementResults}
+                user={user ? { id: user.id, username: user.username } : null}
+                settlementMeta={summary?.settlementMeta ?? null}
+              />
             </div>
-          
-
-          {/* Profit breakdown */}
-          {(() => {
-            const myR = user && settlementResults.find(r => r.userId === user.id);
-            const meta = summary?.settlementMeta;
-            if (!myR || myR.poolGained <= 0 || !meta) return null;
-            return <ProfitBreakdown stake={myR.stake} basePoolShare={myR.basePoolShare ?? 0} underdogBonus={myR.underdogBonus ?? 0} streakBonus={myR.streakBonus ?? 0} totalPool={meta.totalPool} losingPool={meta.losingPool} totalWinningStake={meta.totalWinningStake} underdogSide={meta.underdogSide} playerSide={myR.side} isUnderdog={meta.underdogSide === myR.side} />;
-          })()}
 
           {/* Admin panel */}
           {isAdmin && (
@@ -1030,15 +1030,31 @@ export default function MatchDetail() {
 
       {/* ══ BOTTOM BETTING PANEL ═══════════════════════════════════════════ */}
       {bettingOpen && (typeof document !== "undefined" ? createPortal(
-        <div className="fixed left-0 right-0 bottom-[72px] sm:bottom-0 z-[120] bg-white/95 backdrop-blur-sm border-t border-slate-100 shadow-[0_-8px_32px_rgba(15,23,42,0.10)]">
+        <div
+          className={`fixed left-0 right-0 bottom-[72px] sm:bottom-0 z-[120] shadow-[0_-8px_32px_rgba(15,23,42,0.10)] transition-[background-color,border-color,color,box-shadow] duration-500 ease-in-out ${
+            isBetPanelCollapsed
+              ? "bg-black border-t border-white/15 text-white"
+              : "bg-white border-t border-slate-100 text-slate-900"
+          }`}
+        >
           <div className="max-w-xl mx-auto px-4 pt-3 pb-4 sm:pb-3 space-y-3">
 
             <div className="flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 font-semibold">Bet Controls</p>
+              <p
+                className={`text-[11px] uppercase tracking-[0.14em] font-semibold transition-colors duration-500 ease-in-out ${
+                  isBetPanelCollapsed ? "text-white" : "text-slate-500"
+                }`}
+              >
+                Bet Controls
+              </p>
               <button
                 type="button"
                 onClick={() => setIsBetPanelCollapsed(v => !v)}
-                className="h-7 min-w-7 px-2 rounded-lg border border-slate-200 bg-white text-slate-600 text-sm font-bold touch-manipulation"
+                className={`h-7 min-w-7 px-2 rounded-lg text-sm font-bold touch-manipulation transition-[background-color,border-color,color] duration-500 ease-in-out ${
+                  isBetPanelCollapsed
+                    ? "border border-white/35 bg-white/10 text-white hover:bg-white/15"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
                 aria-expanded={!isBetPanelCollapsed}
                 aria-label={isBetPanelCollapsed ? "Expand bet controls" : "Collapse bet controls"}
               >
@@ -1050,7 +1066,7 @@ export default function MatchDetail() {
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={`h-4 w-4 transition-transform ${isBetPanelCollapsed ? "" : "rotate-180"}`}
+                  className={`h-4 w-4 transition-transform duration-500 ease-in-out ${isBetPanelCollapsed ? "" : "rotate-180"}`}
                   aria-hidden="true"
                 >
                   <polyline points="6 9 12 15 18 9" />
@@ -1143,15 +1159,31 @@ export default function MatchDetail() {
         </div>,
         document.body
       ) : (
-        <div className="fixed left-0 right-0 bottom-[72px] sm:bottom-0 z-[120] bg-white/95 backdrop-blur-sm border-t border-slate-100 shadow-[0_-8px_32px_rgba(15,23,42,0.10)]">
+        <div
+          className={`fixed left-0 right-0 bottom-[72px] sm:bottom-0 z-[120] shadow-[0_-8px_32px_rgba(15,23,42,0.10)] transition-[background-color,border-color,color,box-shadow] duration-500 ease-in-out ${
+            isBetPanelCollapsed
+              ? "bg-black border-t border-white/15 text-white"
+              : "bg-white border-t border-slate-100 text-slate-900"
+          }`}
+        >
           <div className="max-w-xl mx-auto px-4 pt-3 pb-4 sm:pb-3 space-y-3">
 
             <div className="flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500 font-semibold">Bet Controls</p>
+              <p
+                className={`text-[11px] uppercase tracking-[0.14em] font-semibold transition-colors duration-500 ease-in-out ${
+                  isBetPanelCollapsed ? "text-white" : "text-slate-500"
+                }`}
+              >
+                Bet Controls
+              </p>
               <button
                 type="button"
                 onClick={() => setIsBetPanelCollapsed(v => !v)}
-                className="h-7 min-w-7 px-2 rounded-lg border border-slate-200 bg-white text-slate-600 text-sm font-bold touch-manipulation"
+                className={`h-7 min-w-7 px-2 rounded-lg text-sm font-bold touch-manipulation transition-[background-color,border-color,color] duration-500 ease-in-out ${
+                  isBetPanelCollapsed
+                    ? "border border-white/35 bg-white/10 text-white hover:bg-white/15"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
                 aria-expanded={!isBetPanelCollapsed}
                 aria-label={isBetPanelCollapsed ? "Expand bet controls" : "Collapse bet controls"}
               >
@@ -1163,7 +1195,7 @@ export default function MatchDetail() {
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={`h-4 w-4 transition-transform ${isBetPanelCollapsed ? "" : "rotate-180"}`}
+                  className={`h-4 w-4 transition-transform duration-500 ease-in-out ${isBetPanelCollapsed ? "" : "rotate-180"}`}
                   aria-hidden="true"
                 >
                   <polyline points="6 9 12 15 18 9" />

@@ -1,4 +1,4 @@
-import { UNDERDOG_MULTIPLIER } from "@shared/constants";
+import { EQUAL_STAKE_UNDERDOG_MULTIPLIER, UNDERDOG_RATIO_BLEND } from "@shared/constants";
 import { formatNumber } from "../utils/format";
 
 interface Slice {
@@ -86,6 +86,11 @@ export default function ProfitBreakdown({
   playerSide,
   isUnderdog,
 }: Props) {
+  const effectiveUnderdogMult =
+    basePoolShare > 0 && underdogBonus > 0
+      ? (basePoolShare + underdogBonus) / basePoolShare
+      : 1;
+
   const slices: Slice[] = [];
   if (basePoolShare > 0) slices.push({ label: "Pool Share", value: basePoolShare, color: "#3b82f6" });
   if (underdogBonus > 0) slices.push({ label: "Underdog Bonus", value: underdogBonus, color: "#f59e0b" });
@@ -164,21 +169,30 @@ export default function ProfitBreakdown({
             )}
           </div>
           {isUnderdog ? (
-            <div className="bg-slate-50 rounded-lg px-2.5 py-2 font-mono text-[11px] text-slate-700 leading-relaxed border border-slate-200">
+            <div className="bg-slate-50 rounded-lg px-2.5 py-2 font-mono text-[11px] text-slate-700 leading-relaxed border border-slate-200 space-y-1.5">
+              <p className="text-[10px] text-slate-500 leading-snug font-sans">
+                Underdog side (lower total stake; tie → away): base profit ×{" "}
+                <span className="text-amber-600 font-medium">{EQUAL_STAKE_UNDERDOG_MULTIPLIER}×</span> when stakes
+                are equal, else{" "}
+                <span className="text-amber-600 font-medium">
+                  1 + {UNDERDOG_RATIO_BLEND} × (ratio − 1) / ratio
+                </span>{" "}
+                with ratio = max(home, away) / min(home, away).
+              </p>
               <div className="flex flex-wrap items-center gap-x-1">
                 <span className="text-amber-400">pool share</span>
                 <span className="text-slate-500">×</span>
                 <span className="text-slate-500">(</span>
-                <span className="text-amber-400">{UNDERDOG_MULTIPLIER}×</span>
+                <span className="text-amber-400">{formatNumber(effectiveUnderdogMult, 3)}×</span>
                 <span className="text-slate-500">-</span>
                 <span className="text-amber-400">1</span>
                 <span className="text-slate-500">)</span>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-1 text-slate-900">
+              <div className="flex flex-wrap items-center gap-x-1 text-slate-900">
                 <span>{formatNumber(basePoolShare, 2)}</span>
                 <span className="text-slate-500">×</span>
-                <span>{UNDERDOG_MULTIPLIER - 1}</span>
-                <span className="text-slate-500">=</span>
+                <span>{formatNumber(effectiveUnderdogMult - 1, 3)}</span>
+                <span className="text-slate-500">≈</span>
                 <span className="text-amber-400 font-semibold">{formatNumber(underdogBonus, 2)}</span>
               </div>
             </div>

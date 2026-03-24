@@ -1,17 +1,23 @@
 import { prisma } from "../lib/prisma.js";
 import {
+  aggregateHomeAwayStakesForMatch,
+  refreshOddsMultipliersForPendingMatchTx,
+} from "../lib/matchPoolOdds.js";
+import {
   MIN_STAKE,
   MAX_STAKE,
   INSURANCE_COST,
   TOSS_DEFAULT_MINUTES_BEFORE_MATCH,
 } from "../../../shared/constants.js";
+import {
+  impliedGrossReturnMultiplierForPick,
+  roundOddsMultiplier,
+} from "../../../shared/settlementMath.js";
 
 function getBettingClosesAt(startTime: Date, tossTime: Date | null | undefined): Date {
   if (tossTime != null) return tossTime as Date;
   return new Date((startTime as Date).getTime() - TOSS_DEFAULT_MINUTES_BEFORE_MATCH * 60 * 1000);
 }
-
-const FIXED_ODDS = 2;
 
 /** Response shape for place(); keep selects tight to cut JOIN work inside the write transaction. */
 const betPlaceInclude = {
@@ -150,8 +156,23 @@ export const betService = {
       existingBet.amount === stake &&
       existingBet.insured === insured
     ) {
+      const { home, away } = await aggregateHomeAwayStakesForMatch(
+        matchId,
+        match.homeTeamId,
+        match.awayTeamId,
+        "pending",
+      );
+      const oddsMultiplier = roundOddsMultiplier(
+        impliedGrossReturnMultiplierForPick(
+          existingBet.selectedTeamId,
+          match.homeTeamId,
+          match.awayTeamId,
+          home,
+          away,
+        ),
+      );
       return {
-        bet: existingBet,
+        bet: { ...existingBet, oddsMultiplier },
         wallet: {
           balance: user.balance,
           prizePoolContribution: user.prizePoolContribution,
@@ -160,48 +181,54 @@ export const betService = {
       };
     }
 
-    // Update in place when possible: 2 statements in tx instead of delete + create + update.
-    const txOps = existingBet
-      ? [
-          prisma.bet.update({
-            where: { id: existingBet.id },
-            data: {
-              selectedTeamId,
-              amount: stake,
-              oddsMultiplier: FIXED_ODDS,
-              insured,
-            },
-            include: betPlaceInclude,
-          }),
-          prisma.user.update({
-            where: { id: userId },
-            data: { balance: { increment: netBalanceChange } },
-            select: userWalletSelect,
-          }),
-        ]
-      : [
-          prisma.bet.create({
-            data: {
-              userId,
-              matchId,
-              selectedTeamId,
-              amount: stake,
-              oddsMultiplier: FIXED_ODDS,
-              insured,
-              status: "PENDING",
-            },
-            include: betPlaceInclude,
-          }),
-          prisma.user.update({
-            where: { id: userId },
-            data: { balance: { increment: netBalanceChange } },
-            select: userWalletSelect,
-          }),
-        ];
+    const { bet, walletRow } = await prisma.$transaction(async (tx) => {
+      let betId: string;
+      if (existingBet) {
+        const u = await tx.bet.update({
+          where: { id: existingBet.id },
+          data: {
+            selectedTeamId,
+            amount: stake,
+            insured,
+          },
+          select: { id: true },
+        });
+        betId = u.id;
+      } else {
+        const c = await tx.bet.create({
+          data: {
+            userId,
+            matchId,
+            selectedTeamId,
+            amount: stake,
+            oddsMultiplier: 1,
+            insured,
+            status: "PENDING",
+          },
+          select: { id: true },
+        });
+        betId = c.id;
+      }
+      const wallet = await tx.user.update({
+        where: { id: userId },
+        data: { balance: { increment: netBalanceChange } },
+        select: userWalletSelect,
+      });
+      await refreshOddsMultipliersForPendingMatchTx(
+        tx,
+        matchId,
+        match.homeTeamId,
+        match.awayTeamId,
+      );
+      const full = await tx.bet.findUnique({
+        where: { id: betId },
+        include: betPlaceInclude,
+      });
+      return { bet: full, walletRow: wallet };
+    });
 
-    const results = await prisma.$transaction(txOps);
-    const bet = results[0];
-    const walletRow = results[1] as PlaceBetWalletSnapshot;
+    if (!bet) throw new BetError("Bet not found after place", 500);
+
     return {
       bet,
       wallet: {
@@ -223,6 +250,8 @@ export const betService = {
             status: true,
             startTime: true,
             tossTime: true,
+            homeTeamId: true,
+            awayTeamId: true,
           },
         },
         user: { select: { username: true } },
@@ -249,6 +278,9 @@ export const betService = {
     }
 
     const refund = existingBet.amount + (existingBet.insured ? INSURANCE_COST : 0);
+    const mid = existingBet.matchId;
+    const { homeTeamId, awayTeamId } = existingBet.match;
+
     await prisma.$transaction([
       prisma.bet.delete({ where: { id: existingBet.id } }),
       prisma.user.update({
@@ -256,6 +288,16 @@ export const betService = {
         data: { balance: { increment: refund } },
       }),
     ]);
+
+    const remaining = await prisma.bet.count({
+      where: { matchId: mid, status: "PENDING" },
+    });
+    if (remaining > 0) {
+      await prisma.$transaction(async (tx) => {
+        await refreshOddsMultipliersForPendingMatchTx(tx, mid, homeTeamId, awayTeamId);
+      });
+    }
+
     return existingBet;
   },
 
@@ -273,9 +315,87 @@ export const betService = {
     for (const bet of rows) {
       if (!byMatchId.has(bet.matchId)) byMatchId.set(bet.matchId, bet);
     }
-    return Array.from(byMatchId.values()).sort(
+    const unique = Array.from(byMatchId.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+
+    const matchIds = [...new Set(unique.map((b) => b.matchId))];
+    const matchMeta = await prisma.match.findMany({
+      where: { id: { in: matchIds } },
+      select: { id: true, status: true, homeTeamId: true, awayTeamId: true },
+    });
+    const metaById = new Map(matchMeta.map((m) => [m.id, m]));
+
+    const completedIds = matchMeta.filter((m) => m.status === "COMPLETED").map((m) => m.id);
+    const openIds = matchMeta
+      .filter((m) => m.status !== "COMPLETED" && m.status !== "CANCELLED")
+      .map((m) => m.id);
+
+    const [pendingAgg, settledAgg] = await Promise.all([
+      openIds.length > 0
+        ? prisma.bet.groupBy({
+            by: ["matchId", "selectedTeamId"],
+            where: { matchId: { in: openIds }, status: "PENDING" },
+            _sum: { amount: true },
+          })
+        : Promise.resolve([]),
+      completedIds.length > 0
+        ? prisma.bet.groupBy({
+            by: ["matchId", "selectedTeamId"],
+            where: { matchId: { in: completedIds }, status: { in: ["WON", "LOST"] } },
+            _sum: { amount: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    type Totals = { home: number; away: number };
+    const totalsByMatch = new Map<string, Totals>();
+
+    function ingestAgg(
+      agg: { matchId: string; selectedTeamId: string; _sum: { amount: number | null } }[],
+    ) {
+      for (const r of agg) {
+        const m = metaById.get(r.matchId);
+        if (!m) continue;
+        const cur: Totals = totalsByMatch.get(r.matchId) ?? { home: 0, away: 0 };
+        const a = Number(r._sum.amount ?? 0);
+        if (r.selectedTeamId === m.homeTeamId) cur.home = a;
+        else if (r.selectedTeamId === m.awayTeamId) cur.away = a;
+        totalsByMatch.set(r.matchId, cur);
+      }
+    }
+    ingestAgg(pendingAgg as never);
+    ingestAgg(settledAgg as never);
+
+    return unique.map((bet) => {
+      const m = metaById.get(bet.matchId);
+      let home = 0;
+      let away = 0;
+      if (m?.status === "COMPLETED") {
+        const t = totalsByMatch.get(bet.matchId);
+        if (t) {
+          home = t.home;
+          away = t.away;
+        }
+      } else if (m && m.status !== "CANCELLED") {
+        const t = totalsByMatch.get(bet.matchId);
+        if (t) {
+          home = t.home;
+          away = t.away;
+        }
+      }
+      const mult =
+        m?.status === "CANCELLED"
+          ? 1
+          : impliedGrossReturnMultiplierForPick(
+              bet.selectedTeamId,
+              m?.homeTeamId ?? bet.match.homeTeamId,
+              m?.awayTeamId ?? bet.match.awayTeamId,
+              home,
+              away,
+            );
+      return { ...bet, oddsMultiplier: roundOddsMultiplier(mult) };
+    });
   },
 };
 

@@ -12,7 +12,7 @@ const tabs = [
 
 const navContent = (
   <nav
-    className="fixed inset-x-0 bottom-0 z-[100] lg:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(15,23,42,0.08)]"
+    className="fixed inset-x-0 bottom-0 z-[100] lg:hidden border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.08)] [transform:translateZ(0)]"
     style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     aria-label="Main navigation"
   >
